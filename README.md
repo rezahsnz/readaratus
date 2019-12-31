@@ -9,4 +9,4 @@ A dynamic book reading system for computers.
 
 ## License
 
-This project is licensed under the terms of GNU General Pulic License Version 3 or later - see the [LICENSE.md](LICENSE.md) file for details
+This project is licensed under the terms of GNU General Pulic License Version 3 or later - see the [LICENSE](LICENSE) file for details
