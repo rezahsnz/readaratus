@@ -3,7 +3,7 @@ CFLAGS = -Wall `pkg-config --cflags --libs gtk+-3.0 poppler-glib`
 LDFLAGS = `pkg-config --libs gtk+-3.0 poppler-glib` -lm
 
 readaratus : $(SOURCES)
-	cc $(CFLAGS) -o build/readaratus $(SOURCES) $(LDFLAGS)
+	cc $(CFLAGS) -o readaratus $(SOURCES) $(LDFLAGS)
 
 .PHONY : clean
 clean :
