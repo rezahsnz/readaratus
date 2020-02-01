@@ -21,6 +21,7 @@
 
 static GRegex *toc_regex = NULL;
 static GRegex *toc_extraction_regex = NULL;
+static GRegex *toc_decompose_regex = NULL;
 static GHashTable *toc_ids = NULL;
 
 void
@@ -90,6 +91,41 @@ toc_module_init(void)
                                        &err);
     if(!toc_extraction_regex){
         g_print("toc_extraction_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
+                err->domain, err->code, err->message);
+        return; 
+    }
+    char *decompose_pattern = 
+        "^\\s*\n"
+        "# item label: part, chapter, ...\n"
+        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\b\\s*\n"
+        "(?<id>\n"
+        "# digits first: 1, 1.2, 1.a, ...\n"
+        "[0-9]+((\\.|-|_)([0-9]+|[a-zA-Z]))*|\n"
+        "# @alpha first: a, a.1, a.a\n"
+        "# named numbers up to 99\n"
+        "zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\n"
+        "(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
+        "(twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s)?\n"
+        "(one|two|three|four|five|six|seven|eight|nine)?|\n"
+        "# roman numerals up to 99\n"
+        "(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\n"
+        "xxi{1,3}|xxi?v|xxvi{1,3}|xxi?x|\n"
+        "xxxi{1,3}|xxxi?v|xxxvi{1,3}|xxxix|\n"
+        "xli{0,3}|xli?v|xlvi{1,3}|xlix|\n"
+        "li{0,3}|li?v|lvi{1,3}|li?x|\n"
+        "lxi{1,3}|lxi?v|lxvi{1,3}|lxi?x|\n"
+        "lxxi{1,3}|lxxi?v|lxxvi{1,3}|lxxi?x|\n"
+        "lxxxi{1,3}|lxxxi?v|lxxxvi{1,3}|lxxxix|\n"
+        "xci{0,3}|xci?v|xcvi{1,3}|xcix))?\\s*\n"
+        "(?<caption>.+\\b(?=(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+)$))\n"
+        "(?<page_num>(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+))$";
+    err = NULL;
+    toc_decompose_regex = g_regex_new(decompose_pattern,
+                            G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_NO_AUTO_CAPTURE,
+                            0,
+                            &err);
+    if(!toc_decompose_regex){
+        g_print("toc_decompose_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
                 err->domain, err->code, err->message);
         return; 
     }
@@ -676,13 +712,12 @@ toc_create_hashes(TOCItem *toc_item)
 }
 
 void
-toc_create(PopplerDocument *doc,
-           TOCItem        **head_item,
-           int             *max_toc_depth)
+toc_create_from_poppler_index(PopplerDocument *doc,
+                              TOCItem        **head_item,
+                              int             *max_toc_depth)
 {
     PopplerIndexIter *iter = poppler_index_iter_new(doc);
     if(!iter){
-        g_print("TOC is unavailable.\n");
         *head_item = NULL;
         *max_toc_depth = 0;
         return;
@@ -725,6 +760,90 @@ toc_create(PopplerDocument *doc,
     toc_create_hashes(*head_item);
     g_free(l1_label);
     g_free(main_contetns_label);
+}
+
+void
+toc_create_from_contents_pages(GList    *page_texts,
+                               TOCItem **head_item,
+                               int      *max_toc_depth)
+{
+    const char *TOC_LINE_PATTERN = 
+        "\\b(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+)$";
+    GList *contents_pages = NULL;
+    int contents_page_num = -1;
+    int page_num = 0;
+    GList *text_p = page_texts;
+    while(text_p){
+        char *text = text_p->data;
+        char **lines = g_regex_split_simple("\\R",
+                                            text,
+                                            0, 0);
+        int num_lines = g_strv_length(lines);
+        int num_matched_lines = 0;
+        char **line_p = lines;
+        while(*line_p){
+            if(g_regex_match_simple(TOC_LINE_PATTERN,
+                                    *line_p,
+                                    0, 0))
+            {
+                num_matched_lines++;
+            }
+            line_p++;
+        }
+        g_strfreev(lines);
+        if(((float)num_matched_lines / num_lines) >= 0.7){
+            contents_pages = g_list_append(contents_pages,
+                                           text);
+            if(contents_page_num < 0){
+                contents_page_num = page_num;
+            }
+        }
+        page_num++;
+        text_p = text_p->next;
+    }
+    if(contents_page_num < 0){
+        return;
+    }
+    g_print("contents' pages: %d - %d\n",
+            contents_page_num, contents_page_num + g_list_length(contents_pages) - 1);
+    text_p = contents_pages;
+    while(text_p){
+        char *text = text_p->data;
+        char **lines = g_regex_split_simple("\\R",
+                                            text,
+                                            0, 0);
+        int num_lines = g_strv_length(lines);
+        char **line_p = lines;
+        while(*line_p){
+            GMatchInfo *match_info = NULL;
+            g_regex_match(toc_decompose_regex,
+                          *line_p,
+                          0,
+                          &match_info);
+            if(g_match_info_matches(match_info)){
+                char *label = g_match_info_fetch_named(match_info,
+                                                       "label");
+                if(strlen(label) == 0){
+                    g_free(label);
+                    label = NULL;
+                }
+                char *id = g_match_info_fetch_named(match_info,
+                                                    "id");
+                if(strlen(id) == 0){
+                    g_free(id);
+                    id = NULL;
+                }
+                char *caption = g_match_info_fetch_named(match_info,
+                                                         "caption");
+                char *page_num = g_match_info_fetch_named(match_info,
+                                                          "page_num");
+            }
+            g_match_info_free(match_info);
+            line_p++;
+        }
+        g_strfreev(lines);        
+        text_p = text_p->next;
+    }
 }
 
 static void 

@@ -84,9 +84,14 @@ toc_search_by_title(const TOCItem *toc_item,
                     const char    *title);
 
 void
-toc_create(PopplerDocument *doc,
-           TOCItem        **head_item,
-           int              *max_toc_depth);
+toc_create_from_poppler_index(PopplerDocument *doc,
+                              TOCItem        **head_item,
+                              int             *max_toc_depth);
+
+void
+toc_create_from_contents_pages(GList    *page_texts,
+                               TOCItem **head_item,
+                               int      *max_toc_depth);
 
 void
 toc_destroy(TOCItem *head_item);

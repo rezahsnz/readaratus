@@ -7,4 +7,4 @@ readaratus : $(SOURCES)
 
 .PHONY : clean
 clean :
-	-rm build/readaratus
+	-rm readaratus

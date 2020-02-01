@@ -18,13 +18,11 @@
 #ifndef PAGE_META_H
 #define PAGE_META_H
 
-#include <poppler/glib/poppler.h>
 #include <gmodule.h>
 #include <cairo.h>
+#include <poppler/glib/poppler.h>
 #include "rect.h"
-#include "unit_convertor.h"
 #include "figure.h"
-#include "find.h"
 
 typedef struct Link Link;
 struct Link
