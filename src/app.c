@@ -23,6 +23,7 @@
 #include "find_widget.h"
 #include "page_meta.h"
 #include "unit_convertor.h"
+#include "roman_numeral.h"
 
 /* gainsboro: #DCDCDC, (220, 220, 220) */
 static const double gainsboro_r = 0.8627;
@@ -405,61 +406,71 @@ load_text_layouts(PageMeta *meta)
 }
 
 static void
-load_links(PageMeta *meta,
-           int       page_num)
+load_links()
 {
-    meta->links = NULL;
-    GList *link_mappings = poppler_page_get_link_mapping(meta->page);
-    GList *link_p = link_mappings;
-    while(link_p){
-        PopplerLinkMapping *link_mapping = link_p->data;
-        Link *link = g_malloc(sizeof(Link));
-        /* flip and swap y-coordinates */
-        link->physical_layout = rect_new();
-        link->physical_layout->x1 = link_mapping->area.x1;            
-        link->physical_layout->y1 = meta->page_height - link_mapping->area.y2;
-        link->physical_layout->x2 = link_mapping->area.x2;
-        link->physical_layout->y2 = meta->page_height - link_mapping->area.y1;
-        link->is_hovered = FALSE;
-        link->tip = NULL;
-        link->target_page_num = -1;
-        switch(link_mapping->action->type){
-            case POPPLER_ACTION_GOTO_DEST:
-            {
-                PopplerActionGotoDest *goto_dest_action = (PopplerActionGotoDest*)
-                    link_mapping->action;
-                TOCItem target = toc_find_dest(d.doc,
-                                               goto_dest_action->dest);
-                link->target_page_num = target.page_num;
-                link->target_progress_x = target.offset_x;
-                link->target_progress_y = target.offset_y;
-                link->tip = g_strdup_printf("Page '%d'",
-                                            target.page_num);
-                break;
+    for(int page_num = 0; page_num < d.num_pages; page_num++){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        meta->links = NULL;
+        GList *link_mappings = poppler_page_get_link_mapping(meta->page);
+        GList *link_p = link_mappings;
+        while(link_p){
+            PopplerLinkMapping *link_mapping = link_p->data;
+            Link *link = g_malloc(sizeof(Link));
+            link->physical_layout = rect_new();
+            link->physical_layout->x1 = link_mapping->area.x1;            
+            link->physical_layout->y1 = meta->page_height - link_mapping->area.y2;
+            link->physical_layout->x2 = link_mapping->area.x2;
+            link->physical_layout->y2 = meta->page_height - link_mapping->area.y1;
+            link->is_hovered = FALSE;
+            link->tip = NULL;
+            link->target_page_num = -1;
+            switch(link_mapping->action->type){
+                case POPPLER_ACTION_GOTO_DEST:
+                {
+                    PopplerActionGotoDest *goto_dest_action = (PopplerActionGotoDest*)
+                        link_mapping->action;
+                    TOCItem target = toc_find_dest(d.doc,
+                                                   goto_dest_action->dest);
+                    link->target_page_num = target.page_num;
+                    link->target_progress_x = target.offset_x;
+                    link->target_progress_y = target.offset_y;
+                    PageMeta *meta_target = g_ptr_array_index(d.metae,
+                                                              target.page_num);
+                    if(meta_target->page_label->label){
+                        link->tip = g_strdup_printf("Page '%s'",
+                                                    meta_target->page_label->label);
+                    }
+                    else{
+                        link->tip = g_strdup_printf("Page(index): '%d'",
+                                                    target.page_num);
+                    }
+                    break;
+                }
+                case POPPLER_ACTION_GOTO_REMOTE:
+                {
+                    PopplerActionGotoRemote *remote_action = (PopplerActionGotoRemote*)
+                        link_mapping->action;
+                    link->tip = g_markup_printf_escaped("Open '%s'",
+                                                       remote_action->file_name);
+                    break;
+                }
+                case POPPLER_ACTION_URI:
+                {
+                    PopplerActionUri *uri_action = (PopplerActionUri*)
+                        link_mapping->action;
+                    link->tip = g_markup_printf_escaped("URI '%s'",
+                                                       uri_action->uri);
+                    break;
+                }
+                default:;
             }
-            case POPPLER_ACTION_GOTO_REMOTE:
-            {
-                PopplerActionGotoRemote *remote_action = (PopplerActionGotoRemote*)
-                    link_mapping->action;
-                link->tip = g_markup_printf_escaped("Open '%s'",
-                                                   remote_action->file_name);
-                break;
-            }
-            case POPPLER_ACTION_URI:
-            {
-                PopplerActionUri *uri_action = (PopplerActionUri*)
-                    link_mapping->action;
-                link->tip = g_markup_printf_escaped("URI '%s'",
-                                                   uri_action->uri);
-                break;
-            }
-            default:;
+            meta->links = g_list_append(meta->links,
+                                        link);
+            link_p = link_p->next;
         }
-        meta->links = g_list_append(meta->links,
-                                    link);
-        link_p = link_p->next;
+        poppler_page_free_link_mapping(link_mappings);
     }
-    poppler_page_free_link_mapping(link_mappings);
 }
 
 static void
@@ -1071,18 +1082,7 @@ load_metae(void)
         PageMeta *meta = g_malloc(sizeof(PageMeta));
         meta->page_num = page_num;
         meta->page = poppler_document_get_page(d.doc,
-                                               page_num);        
-        meta->page_label = poppler_page_get_label(meta->page);        
-        if(meta->page_label){
-            meta->reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%s</i> of %d</span>",
-                                                          meta->page_label,
-                                                          d.num_pages);
-        }
-        else{
-            meta->reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%d</i> of %d</span>",
-                                                          page_num + 1,
-                                                          d.num_pages);
-        }        
+                                               page_num);               
         poppler_page_get_size(meta->page,
                               &meta->page_width,
                               &meta->page_height);
@@ -1091,9 +1091,7 @@ load_metae(void)
         meta->num_layouts = 0;
         meta->physical_text_layouts = NULL;
         load_text_layouts(meta);
-        meta->links = NULL;
-        load_links(meta,
-                   page_num); 
+        meta->links = NULL;         
         meta->converted_units = NULL;
         meta->figures = NULL;
         meta->referenced_figures = NULL;
@@ -1101,6 +1099,206 @@ load_metae(void)
         meta->find_results = NULL;     
         g_ptr_array_add(d.metae,
                         meta);
+    }
+}
+
+static void
+fix_page_labels(void)
+{
+    /* 
+       Page labels are 'lone' numerals that are the most distant(wrt Y-center)
+       objects to the center of the page. Once they are found, a frequency
+       count is performed and the most frequent diff(between 0-based page_num
+       and label) is chosen as the value that gets subtracted from the
+       page_num of each page to get the actual page label.
+       Initial pages of books are usually labeled with roman numerals. If any 
+       page is found to be labeled this way, it is used as a reference for the
+       labeling of its neighbour pages.
+    */
+    GError *err = NULL;
+    GRegex *page_label_regex = NULL;
+    const char *pattern = 
+        "# roman range: 1-99\n"
+        "^((XC|XL|L?X{0,3})(IX|IV|V?I{0,3})|\\d+)\\b|\n"
+        "\\b((XC|XL|L?X{0,3})(IX|IV|V?I{0,3})|\\d+)$";
+    page_label_regex = g_regex_new(pattern,
+                                   G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_MULTILINE | G_REGEX_NO_AUTO_CAPTURE,
+                                   G_REGEX_MATCH_NOTEMPTY,
+                                   &err);
+    if(!page_label_regex){
+        g_print("page_label_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
+                err->domain, err->code, err->message);
+        return; 
+    }    
+    GHashTable *diff_freq_hash = g_hash_table_new(g_direct_hash,
+                                                  g_direct_equal);
+    for(int page_num = 0; page_num < d.num_pages; page_num++){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        meta->page_label = g_malloc(sizeof(PageLabel));
+        meta->page_label->label = NULL;
+        meta->page_label->physical_layout = NULL;
+
+        double min_dist = meta->page_height;
+        char *page_label_str = NULL;
+        GMatchInfo *match_info = NULL;
+        g_regex_match(page_label_regex,
+                      meta->text,
+                      0,
+                      &match_info);
+        while(g_match_info_matches(match_info)){
+            char *match = g_match_info_fetch(match_info,
+                                             0);
+            GList *pop_list = poppler_page_find_text_with_options(meta->page,
+                                                                  match,
+                                                                  POPPLER_FIND_WHOLE_WORDS_ONLY);
+            GList *list_p = pop_list;
+            while(list_p){
+                Rect *rect = rect_from_poppler_rectangle(list_p->data);
+                rect->y1 = meta->page_height - rect->y1;
+                rect->y2 = meta->page_height - rect->y2;
+                double center_y = rect_center_y(rect);
+                double dist = MIN(center_y, meta->page_height - center_y);
+                if(dist < min_dist){
+                    page_label_str = match;
+                    min_dist = dist;
+                }
+                else{
+                    rect_free(rect);
+                }
+                list_p = list_p->next;
+            }
+            g_list_free(pop_list);
+            if(page_label_str != match){
+                g_free(match);
+            }
+            g_match_info_next(match_info,
+                              NULL);
+        }
+        g_match_info_free(match_info); 
+        if(!page_label_str){
+            continue;
+        }                
+        meta->page_label->label = page_label_str;
+        char *end_ptr = NULL;
+        int page_label_decimal = g_ascii_strtoll(page_label_str,
+                                                 &end_ptr,
+                                                 10);
+        if((page_label_decimal == 0) && (page_label_str == end_ptr)){
+            continue;
+        }
+        int diff = page_num - page_label_decimal;
+        int freq = 0;        
+        if(g_hash_table_contains(diff_freq_hash,
+                                 GINT_TO_POINTER(diff)))
+        {
+            freq = GPOINTER_TO_INT(g_hash_table_lookup(diff_freq_hash,
+                                                       GINT_TO_POINTER(diff)));
+        }
+        freq += 1;
+        g_hash_table_insert(diff_freq_hash,
+                            GINT_TO_POINTER(diff),
+                            GINT_TO_POINTER(freq));
+    }
+    g_regex_unref(page_label_regex);
+    int max_freq = -1, actual_diff = 0;
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init (&iter, diff_freq_hash);
+    while (g_hash_table_iter_next (&iter, &key, &value)){
+        int diff = GPOINTER_TO_INT(key);
+        int freq = GPOINTER_TO_INT(value);
+        if(freq > max_freq){
+            max_freq = freq;
+            actual_diff = diff;
+        }
+    }
+    g_hash_table_unref(diff_freq_hash);
+    /* at least half of pages should suggest the same diff, otherwise simple
+       index-labeling will be used. */
+    if(max_freq < d.num_pages / 2){
+        for(int page_num = 0; page_num < d.num_pages; page_num++){
+            PageMeta *meta = g_ptr_array_index(d.metae,
+                                               page_num);
+            g_free(meta->page_label->label);
+            meta->page_label->label = g_strdup_printf("%d",
+                                                      page_num + 1);
+        }
+        g_print("Majority of the pages provide no labels, using page index instead.\n");
+        return;
+    }
+    /* find the first roman-labeled page starting from the last possible
+       roman-labeled page (because first pages of books are usually un-labeled) */
+    int frl_page_num = actual_diff;
+    for(; frl_page_num >= 0; frl_page_num--){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           frl_page_num);        
+        if(roman_to_decimal(meta->page_label->label) > -1){
+            break;
+        }
+    }
+    if(frl_page_num >= 0){
+        PageMeta *frl_meta = g_ptr_array_index(d.metae,
+                                               frl_page_num);
+        /* label pages before the first roman-labeled page */
+        int pre_frl_page_num = frl_page_num - 1;
+        const char *pre_frl_label = roman_previous(frl_meta->page_label->label);
+        gboolean is_upper = g_ascii_isupper(frl_meta->page_label->label[0]);
+        while(pre_frl_page_num >= 0 && pre_frl_label){
+            PageMeta *pre_frl_meta = g_ptr_array_index(d.metae,
+                                                       pre_frl_page_num);
+            g_free(pre_frl_meta->page_label->label);
+            pre_frl_meta->page_label->label = is_upper ? g_strdup(pre_frl_label)
+                                                       : g_ascii_strdown(pre_frl_label,
+                                                                         -1);
+            pre_frl_label = roman_previous(pre_frl_label);            
+            pre_frl_page_num--;
+        }
+        /* if no more roman numerals exist, unlabel the remaining pages */
+        for(int page_num = 0; page_num < pre_frl_page_num; page_num++){
+            PageMeta *pre_roman_meta = g_ptr_array_index(d.metae,
+                                                         page_num);
+            g_free(pre_roman_meta->page_label->label);
+            pre_roman_meta->page_label->label = NULL;
+        }
+        /* label pages after the first roman labeled page */
+        int post_frl_page_num = frl_page_num + 1;
+        const char *post_frl_label = roman_next(frl_meta->page_label->label);
+        while(post_frl_page_num <= actual_diff && post_frl_label){
+            PageMeta *post_frl_meta = g_ptr_array_index(d.metae,
+                                                        post_frl_page_num);
+            g_free(post_frl_meta->page_label->label);
+            post_frl_meta->page_label->label = is_upper ? g_strdup(post_frl_label)
+                                                        : g_ascii_strdown(post_frl_label,
+                                                                         -1);
+            post_frl_label = roman_next(post_frl_label);
+            post_frl_page_num++;
+        }
+        /* if no more roman numerals exist, unlabel the remaining pages */
+        for(int page_num = post_frl_page_num; page_num <= actual_diff; page_num++){
+            PageMeta *post_roman_meta = g_ptr_array_index(d.metae,
+                                                          page_num);
+            g_free(post_roman_meta->page_label->label);
+            post_roman_meta->page_label->label = NULL;
+        }
+    }
+    else{
+        /* in case no roman labels are found, unlabel the pages */
+        for(int page_num = 0; page_num <= actual_diff; page_num++){
+            PageMeta *unlabeled_meta = g_ptr_array_index(d.metae,
+                                                         page_num);
+            g_free(unlabeled_meta->page_label->label);
+            unlabeled_meta->page_label->label = NULL;
+        }
+    }
+    /* assign numeric labels to decimally labelled pages */
+    for(int page_num = actual_diff + 1; page_num < d.num_pages; page_num++)
+    {
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        g_free(meta->page_label->label);
+        meta->page_label->label = g_strdup_printf("%d",
+                                                  page_num - actual_diff);
     }
 }
 
@@ -1138,11 +1336,8 @@ setup_text_completions(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
-        char *page_label = meta->page_label ? g_strdup(meta->page_label)
-                                            : g_strdup_printf("%d",
-                                                              page_num + 1);
         text_list = g_list_append(text_list,
-                                  page_label);
+                                  g_strdup(meta->page_label->label));
     }
     teleport_widget_update_text_completions(text_list,
                                             "Page");
@@ -1279,9 +1474,12 @@ destroy_document(void)
             list_p = list_p->next;
         }
         g_list_free(meta->referenced_figures);
-        g_object_unref(meta->page);        
+        g_object_unref(meta->page);     
+        if(meta->page_label){
+            g_free(meta->page_label->label);        
+            rect_free(meta->page_label->physical_layout);
+        }
         g_free(meta->page_label);
-        g_free(meta->reading_progress_text);
         g_free(meta);
     }
     g_ptr_array_unref(d.metae);
@@ -1395,6 +1593,10 @@ import_pdf(void)
     g_print("Importing '%s':\n",
             d.filename);
     load_metae();
+    g_print("Fixing page labels...\n");
+    fix_page_labels();
+    g_print("Processing links...\n");
+    load_links();
     g_print("Loading TOC...\n");
     load_toc();
     g_print("Converting units...\n");
@@ -1844,7 +2046,7 @@ teleport(const char *term)
                                            escaped);
            g_free(escaped);
            if(g_regex_match_simple(pattern,
-                                   meta->page_label,
+                                   meta->page_label->label,
                                    0, 0))
            {
                go_back_save();
@@ -1856,22 +2058,6 @@ teleport(const char *term)
            }
             g_free(pattern);
         }
-    }
-    /* object is page number(index) */
-    if(g_regex_match_simple("^\\d+$",
-                            object_name,
-                            0, 0))
-    {
-        int page_num = g_ascii_strtoll(object_name,
-                                       NULL,
-                                       10);
-        if(page_num){
-            go_back_save();
-            goto_page(page_num,
-                      0, 0);
-        }
-        g_free(object_name);
-        return;
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
     GMatchInfo *match_info = NULL;
@@ -2299,7 +2485,7 @@ draw_start_mode(cairo_t *cr)
         char *text_continue;
         if(meta->page_label){
             text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%s', continue reading</span>",
-                                            meta->page_label);
+                                            meta->page_label->label);
         }
         else{
             text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%d', continue reading</span>",
@@ -2593,42 +2779,48 @@ draw_reading_mode(cairo_t *cr)
     /* reading progress */
     int padding = 10;
     double text_width, text_height;
-    get_text_size(cr,
-                  meta->reading_progress_text,
-                  &text_width, &text_height);
-    Rect reading_progress_rect;
-    reading_progress_rect.x1 = widget_width - text_width - 3 * padding;
-    reading_progress_rect.y1 = widget_height - text_height - 3 * padding;
-    reading_progress_rect.x2 = reading_progress_rect.x1 + text_width + 2 * padding;
-    reading_progress_rect.y2 = reading_progress_rect.y1 + text_height + 2 * padding;
-    cairo_rectangle(cr,
-                    reading_progress_rect.x1,
-                    reading_progress_rect.y1,
-                    rect_width(&reading_progress_rect),
-                    rect_height(&reading_progress_rect));
-    cairo_set_source_rgba(cr,
-                          dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr,
-                         0.1333, 0.1333, 0.1333);
-    double visual_progress_height = 8;    
-    cairo_rectangle(cr,
-                    reading_progress_rect.x1 + 1,
-                    reading_progress_rect.y2 - visual_progress_height,
-                    rect_width(&reading_progress_rect) - 2,
-                    visual_progress_height);
-    cairo_stroke(cr);
-    cairo_rectangle(cr,
-                    reading_progress_rect.x1 + 2,
-                    reading_progress_rect.y2 - visual_progress_height + 1,
-                    ((double)(d.cur_page_num + 1) / d.num_pages) * (rect_width(&reading_progress_rect) - 4),
-                    visual_progress_height - 2);
-    cairo_fill(cr);
-    draw_text(cr,
-              meta->reading_progress_text,
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              &reading_progress_rect);
+    if(meta->page_label->label){
+        char *reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%s</i> of %d</span>",
+                                                      meta->page_label->label,
+                                                      d.num_pages);
+        get_text_size(cr,
+                      reading_progress_text,
+                      &text_width, &text_height);
+        Rect reading_progress_rect;
+        reading_progress_rect.x1 = widget_width - text_width - 3 * padding;
+        reading_progress_rect.y1 = widget_height - text_height - 3 * padding;
+        reading_progress_rect.x2 = reading_progress_rect.x1 + text_width + 2 * padding;
+        reading_progress_rect.y2 = reading_progress_rect.y1 + text_height + 2 * padding;
+        cairo_rectangle(cr,
+                        reading_progress_rect.x1,
+                        reading_progress_rect.y1,
+                        rect_width(&reading_progress_rect),
+                        rect_height(&reading_progress_rect));
+        cairo_set_source_rgba(cr,
+                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr,
+                             0.1333, 0.1333, 0.1333);
+        double visual_progress_height = 8;    
+        cairo_rectangle(cr,
+                        reading_progress_rect.x1 + 1,
+                        reading_progress_rect.y2 - visual_progress_height,
+                        rect_width(&reading_progress_rect) - 2,
+                        visual_progress_height);
+        cairo_stroke(cr);
+        cairo_rectangle(cr,
+                        reading_progress_rect.x1 + 2,
+                        reading_progress_rect.y2 - visual_progress_height + 1,
+                        ((double)(d.cur_page_num + 1) / d.num_pages) * (rect_width(&reading_progress_rect) - 4),
+                        visual_progress_height - 2);
+        cairo_fill(cr);
+        draw_text(cr,
+                  reading_progress_text,
+                  PANGO_ALIGN_CENTER,
+                  PANGO_ALIGN_CENTER,
+                  &reading_progress_rect);
+        g_free(reading_progress_text);
+    }
     /* zoom widget */
     /* page fit */
     cairo_rectangle(cr,

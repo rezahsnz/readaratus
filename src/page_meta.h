@@ -24,8 +24,7 @@
 #include "rect.h"
 #include "figure.h"
 
-typedef struct Link Link;
-struct Link
+typedef struct
 {
 	Rect *physical_layout;
 	char *tip;
@@ -33,22 +32,30 @@ struct Link
     int target_page_num;
     double target_progress_x;
     double target_progress_y;
-};
+}Link;
 
-typedef struct PageMeta PageMeta;
-struct PageMeta
+typedef struct
+{
+    char *label;
+    Rect *physical_layout; /* for future use */
+}PageLabel;
+
+typedef struct
 {
 	PopplerPage *page;
 	char *text;
+
     int page_num;
-    char *page_label;
-    char *reading_progress_text;
+    PageLabel *page_label;
+
 	double page_width;
 	double page_height;
     double aspect_ratio;
+
     unsigned int num_layouts;
 	GPtrArray *physical_text_layouts;
 	double mean_line_height;
+
 	GList *links;
 	GList *converted_units;
 
@@ -57,6 +64,6 @@ struct PageMeta
     ReferencedFigure *active_referenced_figure;
 
     GList *find_results;
-};
+}PageMeta;
 
 #endif

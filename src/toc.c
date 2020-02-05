@@ -116,7 +116,7 @@ toc_module_init(void)
         "lxi{1,3}|lxi?v|lxvi{1,3}|lxi?x|\n"
         "lxxi{1,3}|lxxi?v|lxxvi{1,3}|lxxi?x|\n"
         "lxxxi{1,3}|lxxxi?v|lxxxvi{1,3}|lxxxix|\n"
-        "xci{0,3}|xci?v|xcvi{1,3}|xcix))?\\s*\n"
+        "xci{0,3}|xci?v|xcvi{1,3}|xcix))?\\b\\s*\n"
         "(?<caption>.+\\b(?=(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+)$))\n"
         "(?<page_num>(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+))$";
     err = NULL;
@@ -837,6 +837,8 @@ toc_create_from_contents_pages(GList    *page_texts,
                                                          "caption");
                 char *page_num = g_match_info_fetch_named(match_info,
                                                           "page_num");
+                g_print("label: '%s', id: '%s', caption: '%s', page_num: '%s'\n",
+                        label ? label : "N/A", id ? id : "N/A", caption, page_num);
             }
             g_match_info_free(match_info);
             line_p++;
