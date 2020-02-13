@@ -16,8 +16,9 @@
  */
 
 #include "app.h"
-#include <math.h>
+#include <cairo.h>
 #include <pango/pangocairo.h>
+#include <math.h>
 #include "find.h"
 #include "teleport_widget.h"
 #include "find_widget.h"
@@ -563,25 +564,13 @@ load_toc(void)
     /* 1: check if document provides TOC */
     toc_create_from_poppler_index(d.doc,
                                   &d.toc.head_item,
-                                  &d.toc.max_depth);
-    const int MIN_CONTENTS_PAGES = 18;
+                                  &d.toc.max_depth);    
     /* 2: locate contents/index/toc pages */
     if(1 || !d.toc.head_item){
         g_print("Document provides no index, trying to synthesize TOC from the contents' pages.\n");
-        int num_content_pages = MAX(floor(d.num_pages * 0.05), MIN_CONTENTS_PAGES);
-        GList *page_texts = NULL;
-        for(int i = 0; i < num_content_pages; i++){
-            PageMeta *meta = g_ptr_array_index(d.metae,
-                                               i);
-            if(meta->text){
-                page_texts = g_list_append(page_texts,
-                                           meta->text);
-            }
-        }
-        toc_create_from_contents_pages(page_texts,
+        toc_create_from_contents_pages(d.metae,
                                        &d.toc.head_item,
                                        &d.toc.max_depth);
-        g_list_free(page_texts);
     }
     /* 3: scan all pages and create TOC */
     if(!d.toc.head_item){
@@ -1367,13 +1356,7 @@ setup_text_completions(void)
     list_p = d.toc.flattened_items;
     while(list_p){
         TOCItem *toc_item = list_p->data;
-        if(toc_item->depth > 1){
-            if(toc_item->id){
-                text_list = g_list_append(text_list,
-                                          g_strdup_printf("%s %s",
-                                                          toc_item->label,
-                                                          toc_item->id));
-            }
+        if(toc_item->depth > 1){            
             text_list = g_list_append(text_list,
                                       g_strdup(toc_item->title));
         }

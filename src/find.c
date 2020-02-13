@@ -51,26 +51,6 @@ find_result_free(FindResult *fr)
 }
 
 int
-compare_rects(const void *a,
-              const void *b)
-{
-    int comp;
-    const Rect *rect_a = a;
-    const Rect *rect_b = b;
-    if((rect_a->y1 < rect_b->y1) ||
-       (rect_a->y1 == rect_b->y1 &&
-        rect_a->x1 < rect_b->x1))
-    {
-        comp = -1;
-    }
-    else{
-        comp = 1;
-    }
-    /* desc y, asc x*/
-    return -comp;
-}
-
-int
 compare_poppler_rects(const void *a,
                       const void *b)
 {
@@ -141,7 +121,7 @@ match_found_rects(GList  *list_p,
     }
     if(candidate_rects){
         candidate_rects = g_list_sort(candidate_rects,
-                                      compare_rects);
+                                      rect_xy_compare);
         Rect *rect = g_list_first(candidate_rects)->data;
         *matched_rects = g_list_append(*matched_rects,
                                        rect);

@@ -18,11 +18,24 @@
 #include "toc.h"
 #include <gmodule.h>
 #include <glib.h>
+#include <math.h>
+#include "page_meta.h"
+#include "roman_numeral.h"
 
 static GRegex *toc_regex = NULL;
 static GRegex *toc_extraction_regex = NULL;
-static GRegex *toc_decompose_regex = NULL;
+static GRegex *toc_discovery_regex = NULL;
 static GHashTable *toc_ids = NULL;
+
+typedef struct
+{
+    char *match;
+    char *label;
+    char *id;
+    char *caption;
+    char *page_label;
+
+}TOCLine;
 
 void
 toc_module_init(void)
@@ -30,31 +43,23 @@ toc_module_init(void)
     char *pattern = 
         "^\\s?\n"
         "# item label: part, chapter, ...\n"
-        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\s?\n"
+        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\s*\n"
         "(?<id>\n"
         "# digits first: 1, 1.2, 1.a, ...\n"
         "[0-9]+((\\.|-|_)([0-9]+|[a-zA-Z]))*|\n"
         "# @alpha first: a, a.1, a.a\n"
         "# named numbers up to 99\n"
-        "zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\n"
-        "(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
-        "(twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s)?\n"
+        "zero|one|two|three|four|five|six|seven|eight|nine|\n"
+        "ten|eleven|twelve|(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
+        "((twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s*)?)\n"
         "(one|two|three|four|five|six|seven|eight|nine)?|\n"
         "# roman numerals up to 99\n"
-        "(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\n"
-        "xxi{1,3}|xxi?v|xxvi{1,3}|xxi?x|\n"
-        "xxxi{1,3}|xxxi?v|xxxvi{1,3}|xxxix|\n"
-        "xli{0,3}|xli?v|xlvi{1,3}|xlix|\n"
-        "li{0,3}|li?v|lvi{1,3}|li?x|\n"
-        "lxi{1,3}|lxi?v|lxvi{1,3}|lxi?x|\n"
-        "lxxi{1,3}|lxxi?v|lxxvi{1,3}|lxxi?x|\n"
-        "lxxxi{1,3}|lxxxi?v|lxxxvi{1,3}|lxxxix|\n"
-        "xci{0,3}|xci?v|xcvi{1,3}|xcix)\\b\n"
+        "(I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?\\b\n"
         ")";
     GError *err = NULL;
     toc_regex = g_regex_new(pattern,
                             G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_NO_AUTO_CAPTURE,
-                            0,
+                            G_REGEX_MATCH_NOTEMPTY,
                             &err);
     if(!toc_regex){
         g_print("toc_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
@@ -64,68 +69,52 @@ toc_module_init(void)
     char *extraction_pattern = 
         "^\\s?\n"
         "# item label: part, chapter, ...\n"
-        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\s?\n"
+        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\s*\n"
         "(?<id>\n"
         "# digits first: 1, 1.2, 1.a, ...\n"
         "[0-9]+((\\.|-|_)([0-9]+|[a-zA-Z]))*|\n"
         "# @alpha first: a, a.1, a.a\n"
         "# named numbers up to 99\n"
-        "zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\n"
-        "(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
-        "(twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s)?\n"
+        "zero|one|two|three|four|five|six|seven|eight|nine|\n"
+        "ten|eleven|twelve|(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
+        "((twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s*)?)\n"
         "(one|two|three|four|five|six|seven|eight|nine)?|\n"
         "# roman numerals up to 99\n"
-        "(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\n"
-        "xxi{1,3}|xxi?v|xxvi{1,3}|xxi?x|\n"
-        "xxxi{1,3}|xxxi?v|xxxvi{1,3}|xxxix|\n"
-        "xli{0,3}|xli?v|xlvi{1,3}|xlix|\n"
-        "li{0,3}|li?v|lvi{1,3}|li?x|\n"
-        "lxi{1,3}|lxi?v|lxvi{1,3}|lxi?x|\n"
-        "lxxi{1,3}|lxxi?v|lxxvi{1,3}|lxxi?x|\n"
-        "lxxxi{1,3}|lxxxi?v|lxxxvi{1,3}|lxxxix|\n"
-        "xci{0,3}|xci?v|xcvi{1,3}|xcix)\n"
+        "(I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?\\b\n"
         ")";
     toc_extraction_regex = g_regex_new(extraction_pattern,        
                                        G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_NO_AUTO_CAPTURE,
-                                       0,
+                                       G_REGEX_MATCH_NOTEMPTY,
                                        &err);
     if(!toc_extraction_regex){
         g_print("toc_extraction_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
                 err->domain, err->code, err->message);
         return; 
     }
-    char *decompose_pattern = 
+    char *discovery_pattern = 
         "^\\s*\n"
         "# item label: part, chapter, ...\n"
-        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\b\\s*\n"
+        "(?<label>part|ch(apter)?|(sub)?sec(tion)?)?\\s*\n"
         "(?<id>\n"
         "# digits first: 1, 1.2, 1.a, ...\n"
         "[0-9]+((\\.|-|_)([0-9]+|[a-zA-Z]))*|\n"
         "# @alpha first: a, a.1, a.a\n"
         "# named numbers up to 99\n"
-        "zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\n"
-        "(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
-        "(twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s)?\n"
+        "zero|one|two|three|four|five|six|seven|eight|nine|\n"
+        "ten|eleven|twelve|(thir|four|fif|six|seven|eigh|nin)-?teen|\n"
+        "((twenty|thirty|fourty|fifty|sixty|seventy|eighty|ninty)(-|\\s*)?)\n"
         "(one|two|three|four|five|six|seven|eight|nine)?|\n"
         "# roman numerals up to 99\n"
-        "(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\n"
-        "xxi{1,3}|xxi?v|xxvi{1,3}|xxi?x|\n"
-        "xxxi{1,3}|xxxi?v|xxxvi{1,3}|xxxix|\n"
-        "xli{0,3}|xli?v|xlvi{1,3}|xlix|\n"
-        "li{0,3}|li?v|lvi{1,3}|li?x|\n"
-        "lxi{1,3}|lxi?v|lxvi{1,3}|lxi?x|\n"
-        "lxxi{1,3}|lxxi?v|lxxvi{1,3}|lxxi?x|\n"
-        "lxxxi{1,3}|lxxxi?v|lxxxvi{1,3}|lxxxix|\n"
-        "xci{0,3}|xci?v|xcvi{1,3}|xcix))?\\b\\s*\n"
-        "(?<caption>.+\\b(?=(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+)$))\n"
-        "(?<page_num>(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+))$";
+        "(I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?)?\\b\\s*\n"
+        "(?<caption>.+\\b(?=((I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?|\\d+)$))\n"
+        "(?<page_label>((I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?|\\d+))$";
     err = NULL;
-    toc_decompose_regex = g_regex_new(decompose_pattern,
-                            G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_NO_AUTO_CAPTURE,
-                            0,
-                            &err);
-    if(!toc_decompose_regex){
-        g_print("toc_decompose_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
+    toc_discovery_regex = g_regex_new(discovery_pattern,
+                                      G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_NO_AUTO_CAPTURE,
+                                      G_REGEX_MATCH_NOTEMPTY,
+                                      &err);
+    if(!toc_discovery_regex){
+        g_print("toc_discovery_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
                 err->domain, err->code, err->message);
         return; 
     }
@@ -138,6 +127,7 @@ toc_module_destroy(void)
 {    
     g_regex_unref(toc_regex);
     g_regex_unref(toc_extraction_regex);
+    g_regex_unref(toc_discovery_regex);
     if(toc_ids){
         g_hash_table_unref(toc_ids);
     }
@@ -762,21 +752,267 @@ toc_create_from_poppler_index(PopplerDocument *doc,
     g_free(main_contetns_label);
 }
 
-void
-toc_create_from_contents_pages(GList    *page_texts,
-                               TOCItem **head_item,
-                               int      *max_toc_depth)
+
+static void
+align_unprocessed_lines(GPtrArray *page_meta_list,
+                        GHashTable *unprocessed_line_hash,
+                        GList     **aligned_line_list)
 {
+    /* 
+       align incorrectly separated lines of text by simple geograhical
+       checks(comparing Y-centers with thresholding)
+    */
+    *aligned_line_list = NULL;
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, unprocessed_line_hash);
+    while(g_hash_table_iter_next(&iter, &key, &value)){
+        int page_num = GPOINTER_TO_INT(key);
+        PageMeta *meta = g_ptr_array_index(page_meta_list,
+                                           page_num);
+        const double ALIGNMENT_THRESHOLD = meta->mean_line_height * 0.25;
+        GList *unprocessed_line_list = value;
+        GList *already_matched_list = NULL;
+        GList *list_p = unprocessed_line_list;
+        while(list_p){
+            if(g_list_find(already_matched_list,
+                           list_p))
+            {
+                list_p = list_p->next;
+                continue;
+            }
+            GList *matched_line_list = NULL,
+                  *matched_rect_list = NULL;
+            char *line = list_p->data;            
+            GList *rect_list = NULL;
+            GList *pop_list = poppler_page_find_text_with_options(meta->page,
+                                                                  line,
+                                                                  POPPLER_FIND_WHOLE_WORDS_ONLY);
+            GList *pop_p = pop_list;
+            while(pop_p){
+                Rect *rect = rect_from_poppler_rectangle(pop_p->data);
+                rect->y1 = meta->page_height - rect->y1;
+                rect->y2 = meta->page_height - rect->y2;                
+                rect_list = g_list_append(rect_list,
+                                          rect);
+                pop_p = pop_p->next;
+            }
+            g_list_free(pop_list);
+            GList *list_other_p = list_p->next;
+            while(list_other_p){
+                if(g_list_find(already_matched_list,
+                               list_other_p))
+                {
+                    list_other_p = list_other_p->next;
+                    continue;
+                }
+                char *line_other = list_other_p->data;
+                GList *rect_other_list = NULL;
+                GList *pop_other_list = poppler_page_find_text_with_options(meta->page,
+                                                                            line_other,
+                                                                            POPPLER_FIND_WHOLE_WORDS_ONLY);
+                GList *pop_other_p = pop_other_list;
+                while(pop_other_p){
+                    Rect *rect_other = rect_from_poppler_rectangle(pop_other_p->data);
+                    rect_other->y1 = meta->page_height - rect_other->y1;
+                    rect_other->y2 = meta->page_height - rect_other->y2;                
+                    rect_other_list = g_list_append(rect_other_list,
+                                                    rect_other);
+                    pop_other_p = pop_other_p->next;
+                }
+                g_list_free(pop_other_list);
+                gboolean is_matched = FALSE;
+                GList *rect_p = rect_list;
+                while(!is_matched && rect_p){
+                    Rect *rect = rect_p->data;
+                    double rect_cy = rect_center_y(rect);
+                    GList *rect_other_p = rect_other_list;
+                    while(!is_matched && rect_other_p){
+                        Rect *rect_other = rect_other_p->data;
+                        double rect_other_cy = rect_center_y(rect_other);
+                        if(fabs(rect_cy - rect_other_cy) < ALIGNMENT_THRESHOLD){
+                            if(!matched_line_list){
+                                matched_line_list = g_list_append(matched_line_list,
+                                                                  list_p);
+                                matched_rect_list = g_list_append(matched_rect_list,
+                                                                  rect_copy(rect));
+                            }
+                            matched_line_list = g_list_append(matched_line_list,
+                                                              list_other_p);
+                            matched_rect_list = g_list_append(matched_rect_list,
+                                                              rect_copy(rect_other));
+                            is_matched = TRUE;
+                        }
+                        rect_other_p = rect_other_p->next;
+                    }                    
+                    rect_p = rect_p->next;
+                }
+                g_list_free_full(rect_other_list,
+                                 (GDestroyNotify)rect_free);
+                list_other_p = list_other_p->next;
+            }
+            g_list_free_full(rect_list,
+                             (GDestroyNotify)rect_free);
+            if(matched_line_list){
+                already_matched_list = g_list_concat(already_matched_list,
+                                                     matched_line_list);
+                GHashTable *rect_string_hash = g_hash_table_new(g_direct_hash,
+                                                                g_direct_equal);
+                for(int i = 0; i < g_list_length(matched_line_list); i++){
+                    Rect *rect = g_list_nth_data(matched_rect_list,
+                                                 i);
+                    GList *line_string_p = g_list_nth_data(matched_line_list,
+                                                           i);
+                    g_hash_table_insert(rect_string_hash,
+                                        rect,
+                                        line_string_p->data);
+                }
+                matched_rect_list = g_list_sort(matched_rect_list,
+                                                rect_x_compare);
+                GString *toc_line = g_string_new(NULL);
+                GList *rect_p = matched_rect_list;
+                while(rect_p){
+                    Rect *rect = rect_p->data;
+                    char *string = g_hash_table_lookup(rect_string_hash,
+                                                       rect);
+                    toc_line = g_string_append(toc_line,
+                                               string);
+                    if(rect_p->next){
+                        toc_line = g_string_append(toc_line,
+                                                   " ");
+                    }
+                    rect_p = rect_p->next;
+                }
+                g_print("TOC detected(p%d): '%s'\n", meta->page_num, toc_line->str);
+                *aligned_line_list = g_list_append(*aligned_line_list,
+                                                   toc_line->str);
+                g_string_free(toc_line,
+                              FALSE);
+                g_hash_table_unref(rect_string_hash);
+                g_list_free_full(matched_rect_list,
+                                 (GDestroyNotify)rect_free);
+            }
+            list_p = list_p->next;
+        }
+        g_list_free(already_matched_list);
+    }    
+}
+
+static void
+decompose_lines(GList *line_list,
+                GList **toc_line_list,
+                GList **unprocessed_line_list)
+{
+    /* 
+       decompose a line of text into separate items.
+       'chapter II homology 610' >
+       {label: 'chapter', id: 'II', caption: 'homology', page_label: '610'}
+    */
+    *toc_line_list = NULL;
+    if(unprocessed_line_list){
+        *unprocessed_line_list = NULL;
+    }
+    GList *list_p = line_list;
+    while(list_p){
+        char *line = list_p->data;
+        GMatchInfo *match_info = NULL;
+        g_regex_match(toc_discovery_regex,
+                      line,
+                      0,
+                      &match_info);
+        if(g_match_info_matches(match_info)){
+            char *label = g_match_info_fetch_named(match_info,
+                                                   "label");
+            if(strlen(label) == 0){
+                g_free(label);
+                label = NULL;
+            }            
+            char *id = g_match_info_fetch_named(match_info,
+                                                "id");
+            if(strlen(id) == 0){
+                g_free(id);
+                id = NULL;
+            }
+            TOCLine *toc_line = g_malloc(sizeof(TOCLine)); 
+            toc_line->match = g_match_info_fetch(match_info,
+                                                 0);
+            toc_line->label = label;
+            toc_line->id = id;
+            toc_line->caption = g_match_info_fetch_named(match_info,
+                                                         "caption");
+            toc_line->page_label = g_match_info_fetch_named(match_info,
+                                                            "page_label");
+            *toc_line_list = g_list_append(*toc_line_list,
+                                           toc_line);
+        }
+        else{        
+            if(unprocessed_line_list){    
+                *unprocessed_line_list = g_list_append(*unprocessed_line_list,
+                                                       g_strdup(line));
+            }
+            g_print("###: %s\n", line);
+        }
+        g_match_info_free(match_info);
+        list_p = list_p->next;
+    }
+}
+
+static int
+compare_toc_lines(const void *a,
+                  const void *b)
+{
+    const TOCLine *toc_line_a = a;
+    const TOCLine *toc_line_b = b;
+    if(roman_is_valid(toc_line_a->page_label)){
+        if(roman_is_valid(toc_line_b->page_label)){
+            return roman_to_decimal(toc_line_a->page_label) -
+                   roman_to_decimal(toc_line_b->page_label);
+        }
+        else{
+            return -1;
+        }
+    }
+    else{
+        if(roman_is_valid(toc_line_b->page_label)){            
+            return +1;
+        }
+        else{
+            char *end_ptr = NULL;
+            int page_num_a = g_ascii_strtoll(toc_line_a->page_label,
+                                             &end_ptr,
+                                             10);
+            end_ptr = NULL;
+            int page_num_b = g_ascii_strtoll(toc_line_b->page_label,
+                                             &end_ptr,
+                                             10);
+            return page_num_a - page_num_b;
+        }
+    }    
+}
+
+void
+toc_create_from_contents_pages(GPtrArray *page_meta_list,
+                               TOCItem   **head_item,
+                               int       *max_toc_depth)
+{
+    /*
+        scan initial pages of the document and detect the pages that contain
+        contents'. next, scan each detected page and decompose each line into
+        'id', 'page_label', ... items. each page might also contain visually
+        healthy toc data that are incorrectly separated by new-lines. try to
+        align separated texts and decompose newly re-aligned texts.
+    */
     const char *TOC_LINE_PATTERN = 
-        "\\b(i{1,3}|i?v|vi{1,3}|i?x|xi{1,3}|xiv|xvi{1,3}|xi?x|\\d+)$";
-    GList *contents_pages = NULL;
-    int contents_page_num = -1;
-    int page_num = 0;
-    GList *text_p = page_texts;
-    while(text_p){
-        char *text = text_p->data;
+        "\\b((I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?|\\d+)$";
+    const int MIN_CONTENTS_PAGES = 18;
+    const int NUM_CONTENTS_PAGES = MAX(floor(page_meta_list->len * 0.05),
+                                       MIN_CONTENTS_PAGES);
+    GList *contents_page_list = NULL;
+    for(int page_num = 0; page_num < NUM_CONTENTS_PAGES; page_num++){
+        PageMeta *meta = g_ptr_array_index(page_meta_list,
+                                           page_num);
         char **lines = g_regex_split_simple("\\R",
-                                            text,
+                                            meta->text,
                                             0, 0);
         int num_lines = g_strv_length(lines);
         int num_matched_lines = 0;
@@ -784,67 +1020,90 @@ toc_create_from_contents_pages(GList    *page_texts,
         while(*line_p){
             if(g_regex_match_simple(TOC_LINE_PATTERN,
                                     *line_p,
-                                    0, 0))
+                                    G_REGEX_CASELESS,
+                                    0))
             {
                 num_matched_lines++;
             }
             line_p++;
         }
         g_strfreev(lines);
-        if(((float)num_matched_lines / num_lines) >= 0.7){
-            contents_pages = g_list_append(contents_pages,
-                                           text);
-            if(contents_page_num < 0){
-                contents_page_num = page_num;
-            }
+        float match_score = (float)num_matched_lines / num_lines;
+        if(match_score == 1.0){
+            g_print("Possible noisy TOC due to complete match score at page %s.\n",
+                    meta->page_label->label);
         }
-        page_num++;
-        text_p = text_p->next;
+        if(match_score >= 0.7){
+            contents_page_list = g_list_append(contents_page_list,
+                                               meta);
+            g_print("TOC contents observed at page %s\n", meta->page_label->label);
+        }
     }
-    if(contents_page_num < 0){
+    if(!contents_page_list){
         return;
     }
-    g_print("contents' pages: %d - %d\n",
-            contents_page_num, contents_page_num + g_list_length(contents_pages) - 1);
-    text_p = contents_pages;
-    while(text_p){
-        char *text = text_p->data;
+    /* @ make sure toc contents' pages are next to each other */
+    GHashTable *unprocessed_line_hash = g_hash_table_new(g_direct_hash,
+                                                         g_direct_equal);       
+    GList *toc_line_list = NULL;    
+    GList *meta_p = contents_page_list;
+    while(meta_p){
+        const PageMeta *meta = meta_p->data;
         char **lines = g_regex_split_simple("\\R",
-                                            text,
+                                            meta->text,
                                             0, 0);
-        int num_lines = g_strv_length(lines);
+        GList *line_list = NULL;
         char **line_p = lines;
         while(*line_p){
-            GMatchInfo *match_info = NULL;
-            g_regex_match(toc_decompose_regex,
-                          *line_p,
-                          0,
-                          &match_info);
-            if(g_match_info_matches(match_info)){
-                char *label = g_match_info_fetch_named(match_info,
-                                                       "label");
-                if(strlen(label) == 0){
-                    g_free(label);
-                    label = NULL;
-                }
-                char *id = g_match_info_fetch_named(match_info,
-                                                    "id");
-                if(strlen(id) == 0){
-                    g_free(id);
-                    id = NULL;
-                }
-                char *caption = g_match_info_fetch_named(match_info,
-                                                         "caption");
-                char *page_num = g_match_info_fetch_named(match_info,
-                                                          "page_num");
-                g_print("label: '%s', id: '%s', caption: '%s', page_num: '%s'\n",
-                        label ? label : "N/A", id ? id : "N/A", caption, page_num);
-            }
-            g_match_info_free(match_info);
+            line_list = g_list_append(line_list,
+                                      g_strdup(*line_p));
             line_p++;
         }
-        g_strfreev(lines);        
-        text_p = text_p->next;
+        g_strfreev(lines);
+        GList *toc_line_list_paged = NULL,
+              *unprocessed_line_list_paged = NULL;
+        decompose_lines(line_list,
+                       &toc_line_list_paged,
+                       &unprocessed_line_list_paged);        
+        g_list_free_full(line_list,
+                         (GDestroyNotify)g_free);
+        toc_line_list = g_list_concat(toc_line_list,
+                                      toc_line_list_paged);     
+        g_hash_table_insert(unprocessed_line_hash,
+                            GINT_TO_POINTER(meta->page_num),
+                            unprocessed_line_list_paged);    
+        meta_p = meta_p->next;
+    }
+    GList *aligned_line_list = NULL;
+    align_unprocessed_lines(page_meta_list,
+                            unprocessed_line_hash,
+                            &aligned_line_list);
+    GList *unprocessed_line_list = g_hash_table_get_values(unprocessed_line_hash);                                   
+    GList *list_p = unprocessed_line_list;
+    while(list_p){
+        g_list_free_full(list_p->data,
+                         (GDestroyNotify)g_free);
+        list_p = list_p->next;
+    }
+    g_list_free(unprocessed_line_list);
+    g_hash_table_unref(unprocessed_line_hash);
+    GList *scavenged_toc_line_list = NULL;
+    decompose_lines(aligned_line_list,
+                    &scavenged_toc_line_list,
+                    NULL);
+    g_list_free_full(aligned_line_list,
+                     (GDestroyNotify)g_free);
+    toc_line_list = g_list_concat(toc_line_list,
+                                  scavenged_toc_line_list);
+    toc_line_list = g_list_sort(toc_line_list,
+                                compare_toc_lines);
+    g_print("final toc:\n");
+    list_p = toc_line_list;
+    while(list_p){
+        TOCLine *toc_line = list_p->data;
+        g_print("label: '%s', id: '%s', caption: '%s', page: '%s'\n",
+                toc_line->label, toc_line->id, toc_line->caption, toc_line->page_label);
+        list_p = list_p->next;
     }
 }
 

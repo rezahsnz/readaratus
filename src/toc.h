@@ -23,30 +23,31 @@
 
 enum TOCType
 {
-        None = 0,
-        Subsection = 10,
-        Section = 11,
-        Chapter = 12,
-        Part = 13
+    None = 0,
+    Subsection = 10,
+    Section = 11,
+    Chapter = 12,
+    Part = 13
 };
 typedef struct TOCItem TOCItem;
 struct TOCItem
 {
-	char *title;
+    char *title;
     char *label;
     char *id;
-	int depth;
-	int page_num;
-	int length;
+	  int depth;
+	  int page_num;
+	  int length;
     Rect *rect;
-	TOCItem *parent;
+	  TOCItem *parent;
     TOCItem *next;
     TOCItem *previous;
-	GList *children;
+	  GList *children;
 	
     double offset_x;
-	double offset_y;
+	  double offset_y;
 };
+
 
 void
 toc_module_init(void);
@@ -60,13 +61,12 @@ toc_item_new(void);
 void 
 toc_item_free(TOCItem *toc_item);
 
-
 void
 toc_dump(TOCItem *toc_item);
 
 TOCItem 
 toc_find_dest(PopplerDocument *doc,
-	       	  PopplerDest     *dest);
+	       	    PopplerDest     *dest);
 
 enum TOCType
 toc_get_item_type(const char *label);
@@ -89,9 +89,9 @@ toc_create_from_poppler_index(PopplerDocument *doc,
                               int             *max_toc_depth);
 
 void
-toc_create_from_contents_pages(GList    *page_texts,
-                               TOCItem **head_item,
-                               int      *max_toc_depth);
+toc_create_from_contents_pages(GPtrArray *page_meta_list,
+                               TOCItem   **head_item,
+                               int       *max_toc_depth);
 
 void
 toc_destroy(TOCItem *head_item);

@@ -19,7 +19,6 @@
 #define PAGE_META_H
 
 #include <gmodule.h>
-#include <cairo.h>
 #include <poppler/glib/poppler.h>
 #include "rect.h"
 #include "figure.h"
