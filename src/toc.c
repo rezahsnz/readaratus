@@ -37,6 +37,15 @@ typedef struct
 
 }TOCLine;
 
+typedef struct
+{
+    PageMeta *meta;
+    char **lines;
+    int num_lines;
+    int num_labels;
+    double score;
+}ContentsPage;
+
 void
 toc_module_init(void)
 {
@@ -990,24 +999,52 @@ compare_toc_lines(const void *a,
     }    
 }
 
+static int
+compare_contents_page_groups(const void *a,
+                             const void *b)
+{
+    double weighted_score_a = 0.0,
+           weighted_score_b = 0.0;
+    int len = 0;
+    const GList *list_p = a;
+    while(list_p){        
+        ContentsPage *contents_page = list_p->data;
+        weighted_score_a += contents_page->score * 0.65 + 
+            ((float)contents_page->num_labels / contents_page->num_lines) * 0.35;
+        list_p = list_p->next;
+        len++;
+    }
+    weighted_score_a /= len;
+    len = 0;
+    list_p = b;
+    while(list_p){        
+        ContentsPage *contents_page = list_p->data;
+        weighted_score_b += contents_page->score * 0.65 + 
+            ((float)contents_page->num_labels / contents_page->num_lines) * 0.35;
+        list_p = list_p->next;
+        len++;
+    }
+    weighted_score_b /= len;
+    return weighted_score_a - weighted_score_b;
+}
+
 void
 toc_create_from_contents_pages(GPtrArray *page_meta_list,
                                TOCItem   **head_item,
                                int       *max_toc_depth)
 {
     /*
-        scan initial pages of the document and detect the pages that contain
-        contents'. next, scan each detected page and decompose each line into
-        'id', 'page_label', ... items. each page might also contain visually
-        healthy toc data that are incorrectly separated by new-lines. try to
-        align separated texts and decompose newly re-aligned texts.
+        scan document's initial pages for toc contents. if a page happens to
+        contain toc contents, try to extract contetns related data from its
+        lines. besides valid data, each page might also contain separate lines
+        that are incorrectly scattered by the pdf engine. to recycle scattered
+        lines, we would try to align them geographically.
     */
-    const char *TOC_LINE_PATTERN = 
-        "\\b((I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?|\\d+)$";
     const int MIN_CONTENTS_PAGES = 18;
     const int NUM_CONTENTS_PAGES = MAX(floor(page_meta_list->len * 0.05),
                                        MIN_CONTENTS_PAGES);
-    GList *contents_page_list = NULL;
+    GList *contents_page_group_list = NULL;
+    int most_recent_contents_page = -2;
     for(int page_num = 0; page_num < NUM_CONTENTS_PAGES; page_num++){
         PageMeta *meta = g_ptr_array_index(page_meta_list,
                                            page_num);
@@ -1015,51 +1052,92 @@ toc_create_from_contents_pages(GPtrArray *page_meta_list,
                                             meta->text,
                                             0, 0);
         int num_lines = g_strv_length(lines);
+        int num_labels = 0;
         int num_matched_lines = 0;
         char **line_p = lines;
         while(*line_p){
-            if(g_regex_match_simple(TOC_LINE_PATTERN,
+            if(g_regex_match_simple("\\b((I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?|\\d+)$",
                                     *line_p,
                                     G_REGEX_CASELESS,
                                     0))
             {
                 num_matched_lines++;
             }
+            if(g_regex_match_simple("^(part|ch(apter)?|(sub)?sec(tion)?)\\b",
+                                    *line_p,
+                                    G_REGEX_CASELESS,
+                                    0))
+            {
+                num_labels++;
+            }
             line_p++;
         }
-        g_strfreev(lines);
-        float match_score = (float)num_matched_lines / num_lines;
-        if(match_score == 1.0){
+        float score = (float)num_matched_lines / num_lines;
+        if(score == 1.0){
             g_print("Possible noisy TOC due to complete match score at page %s.\n",
                     meta->page_label->label);
         }
-        if(match_score >= 0.7){
-            contents_page_list = g_list_append(contents_page_list,
-                                               meta);
+        if(score >= 0.7){
+            ContentsPage *contents_page = g_malloc(sizeof(ContentsPage));
+            contents_page->meta = meta;
+            contents_page->lines = lines;
+            contents_page->num_lines = num_lines;
+            contents_page->score = score;
+            contents_page->num_labels = num_labels;
+            if(meta->page_num - most_recent_contents_page == 1){ 
+                GList *contents_page_group = g_list_last(contents_page_group_list)->data;
+                contents_page_group = g_list_append(contents_page_group,
+                                                    contents_page);               
+            }
+            else{                
+                GList *contents_page_group = NULL;
+                contents_page_group = g_list_append(contents_page_group,
+                                                    contents_page); 
+                contents_page_group_list = g_list_append(contents_page_group_list,
+                                                         contents_page_group); 
+            }
+            most_recent_contents_page = meta->page_num;
             g_print("TOC contents observed at page %s\n", meta->page_label->label);
         }
+        else{
+            g_strfreev(lines);
+        }
     }
-    if(!contents_page_list){
+    if(!contents_page_group_list){
         return;
     }
-    /* @ make sure toc contents' pages are next to each other */
+    contents_page_group_list = g_list_sort(contents_page_group_list,
+                                           compare_contents_page_groups);
+    g_print("page groups likely to contain toc data:\n");
+    GList *group_p = contents_page_group_list;
+    while(group_p){
+        g_print("{");
+        GList *list_p = group_p->data;
+        while(list_p){
+            ContentsPage *contents_page = list_p->data;
+            g_print("'%s'", contents_page->meta->page_label->label);
+            if(list_p->next){
+                g_print(", ");
+            }
+            list_p = list_p->next;
+        }
+        g_print("} %s\n",
+                g_list_last(contents_page_group_list) == group_p ? "*" : "");
+        group_p = group_p->next;
+    }
     GHashTable *unprocessed_line_hash = g_hash_table_new(g_direct_hash,
                                                          g_direct_equal);       
     GList *toc_line_list = NULL;    
-    GList *meta_p = contents_page_list;
-    while(meta_p){
-        const PageMeta *meta = meta_p->data;
-        char **lines = g_regex_split_simple("\\R",
-                                            meta->text,
-                                            0, 0);
+    GList *contents_p = g_list_last(contents_page_group_list)->data;
+    while(contents_p){
+        ContentsPage *contents_page = contents_p->data;        
         GList *line_list = NULL;
-        char **line_p = lines;
+        char **line_p = contents_page->lines;
         while(*line_p){
             line_list = g_list_append(line_list,
                                       g_strdup(*line_p));
             line_p++;
         }
-        g_strfreev(lines);
         GList *toc_line_list_paged = NULL,
               *unprocessed_line_list_paged = NULL;
         decompose_lines(line_list,
@@ -1070,9 +1148,9 @@ toc_create_from_contents_pages(GPtrArray *page_meta_list,
         toc_line_list = g_list_concat(toc_line_list,
                                       toc_line_list_paged);     
         g_hash_table_insert(unprocessed_line_hash,
-                            GINT_TO_POINTER(meta->page_num),
+                            GINT_TO_POINTER(contents_page->meta->page_num),
                             unprocessed_line_list_paged);    
-        meta_p = meta_p->next;
+        contents_p = contents_p->next;
     }
     GList *aligned_line_list = NULL;
     align_unprocessed_lines(page_meta_list,
