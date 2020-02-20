@@ -569,6 +569,7 @@ load_toc(void)
     if(1 || !d.toc.head_item){
         g_print("Document provides no index, trying to synthesize TOC from the contents' pages.\n");
         toc_create_from_contents_pages(d.metae,
+                                       d.page_label_num_hash,
                                        &d.toc.head_item,
                                        &d.toc.max_depth);
     }
@@ -1289,6 +1290,17 @@ fix_page_labels(void)
         meta->page_label->label = g_strdup_printf("%d",
                                                   page_num - actual_diff);
     }
+    for(int page_num = 0; page_num < d.num_pages; page_num++){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        if(!meta->page_label->label){
+            continue;
+        }
+        g_hash_table_insert(d.page_label_num_hash,
+                            meta->page_label->label,
+                            GINT_TO_POINTER(page_num));
+    }
+
 }
 
 static void
@@ -1492,6 +1504,7 @@ destroy_document(void)
             p = g_queue_pop_head(d.go_back_stack);
         }
     }
+    g_hash_table_remove_all(d.page_label_num_hash);
     g_free(d.filename);    
     g_free(d.doc_info.book_info_label);
     g_free(d.doc_info.book_info_data);
@@ -2019,28 +2032,14 @@ teleport(const char *term)
     char *object_name = g_strdup(term);
     g_strstrip(object_name);
     /* object is page label */
-    for(int page_num = 0; page_num < d.num_pages; page_num++){
-        PageMeta *meta = g_ptr_array_index(d.metae,
-                                           page_num);
-        if(meta->page_label){
-           char *escaped = g_regex_escape_string(object_name,
-                                                 -1);
-           char *pattern = g_strdup_printf("^%s$",
-                                           escaped);
-           g_free(escaped);
-           if(g_regex_match_simple(pattern,
-                                   meta->page_label->label,
-                                   0, 0))
-           {
-               go_back_save();
-               goto_page(page_num,
-                         0, 0);
-               g_free(pattern);
-               g_free(object_name);
-               return;
-           }
-            g_free(pattern);
-        }
+    int page_num = translate_page_label(d.page_label_num_hash,
+                                        object_name);
+    if(page_num >= 0){
+        go_back_save();
+        goto_page(page_num,
+                  0, 0);
+        g_free(object_name);
+        return;
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
     GMatchInfo *match_info = NULL;
@@ -4214,6 +4213,7 @@ destroy_app()
     g_object_unref(ui.text_cursor); 
     g_object_unref(ui.pointer_cursor); 
     
+    g_hash_table_unref(d.page_label_num_hash);
     if(d.go_back_stack){
         g_queue_free(d.go_back_stack);
     }
@@ -4323,6 +4323,8 @@ init_app(GtkApplication *app)
     ui.find_text_launcher_rect = rect_new();
     ui.toc_launcher_rect = rect_new();
 
+    d.page_label_num_hash = g_hash_table_new(g_str_hash,
+                                             g_str_equal);
     d.go_back_stack = g_queue_new();
 
     gtk_container_add(GTK_CONTAINER(ui.main_window), ui.vellum);    

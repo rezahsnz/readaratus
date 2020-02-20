@@ -913,7 +913,7 @@ decompose_lines(GList *line_list,
                 GList **unprocessed_line_list)
 {
     /* 
-       decompose a line of text into separate items.
+       decompose a line of text into separate toc items.
        'chapter II homology 610' >
        {label: 'chapter', id: 'II', caption: 'homology', page_label: '610'}
     */
@@ -1028,8 +1028,47 @@ compare_contents_page_groups(const void *a,
     return weighted_score_a - weighted_score_b;
 }
 
+int
+translate_page_label(GHashTable *page_label_num_hash,
+                     const char *label)
+{
+    int page_num = -1;
+    if(g_hash_table_contains(page_label_num_hash,
+                             label))
+    {
+        page_num = GPOINTER_TO_INT(g_hash_table_lookup(page_label_num_hash,
+                                                       label));
+    }
+    else{
+        GList *key_list = g_hash_table_get_keys(page_label_num_hash);
+        GList *list_p = key_list;
+        while(list_p){
+            char *key = list_p->data;
+            char *escaped = g_regex_escape_string(key,
+                                                  -1);
+            char *pattern = g_strdup_printf("^%s$",
+                                            escaped);
+            g_free(escaped);
+            if(g_regex_match_simple(pattern,
+                                    label,
+                                    G_REGEX_CASELESS, 0))
+            {
+                g_free(pattern);
+                page_num = GPOINTER_TO_INT(g_hash_table_lookup(page_label_num_hash,
+                                                               key));
+                break;
+            }
+            g_free(pattern);
+            list_p = list_p->next;
+        }
+        g_list_free(key_list);
+    }
+    return page_num;
+}
+
 void
-toc_create_from_contents_pages(GPtrArray *page_meta_list,
+toc_create_from_contents_pages(GPtrArray  *page_meta_list,
+                               GHashTable *page_label_num_hash,
                                TOCItem   **head_item,
                                int       *max_toc_depth)
 {
@@ -1115,68 +1154,110 @@ toc_create_from_contents_pages(GPtrArray *page_meta_list,
         GList *list_p = group_p->data;
         while(list_p){
             ContentsPage *contents_page = list_p->data;
-            g_print("'%s'", contents_page->meta->page_label->label);
-            if(list_p->next){
-                g_print(", ");
-            }
+            g_print("'%s'%s",
+                    contents_page->meta->page_label->label,
+                    list_p->next ? ", " : "");
             list_p = list_p->next;
         }
-        g_print("} %s\n",
-                g_list_last(contents_page_group_list) == group_p ? "*" : "");
+        g_print("}\n");
         group_p = group_p->next;
     }
-    GHashTable *unprocessed_line_hash = g_hash_table_new(g_direct_hash,
-                                                         g_direct_equal);       
-    GList *toc_line_list = NULL;    
-    GList *contents_p = g_list_last(contents_page_group_list)->data;
-    while(contents_p){
-        ContentsPage *contents_page = contents_p->data;        
-        GList *line_list = NULL;
-        char **line_p = contents_page->lines;
-        while(*line_p){
-            line_list = g_list_append(line_list,
-                                      g_strdup(*line_p));
-            line_p++;
+    GList *final_toc_line_list = NULL;
+    group_p = g_list_last(contents_page_group_list);
+    while(group_p){
+        GHashTable *unprocessed_line_hash = g_hash_table_new(g_direct_hash,
+                                                             g_direct_equal);       
+        GList *toc_line_list = NULL;  
+        int total_lines_of_group = 0;
+        GList *contents_p = group_p->data;
+        while(contents_p){
+            ContentsPage *contents_page = contents_p->data; 
+            total_lines_of_group += contents_page->num_lines;       
+            GList *line_list = NULL;
+            char **line_p = contents_page->lines;
+            while(*line_p){
+                line_list = g_list_append(line_list,
+                                          g_strdup(*line_p));
+                line_p++;
+            }
+            GList *toc_line_list_paged = NULL,
+                  *unprocessed_line_list_paged = NULL;
+            decompose_lines(line_list,
+                            &toc_line_list_paged,
+                            &unprocessed_line_list_paged);        
+            g_list_free_full(line_list,
+                             (GDestroyNotify)g_free);
+            toc_line_list = g_list_concat(toc_line_list,
+                                          toc_line_list_paged);     
+            g_hash_table_insert(unprocessed_line_hash,
+                                GINT_TO_POINTER(contents_page->meta->page_num),
+                                unprocessed_line_list_paged);    
+            contents_p = contents_p->next;
         }
-        GList *toc_line_list_paged = NULL,
-              *unprocessed_line_list_paged = NULL;
-        decompose_lines(line_list,
-                       &toc_line_list_paged,
-                       &unprocessed_line_list_paged);        
-        g_list_free_full(line_list,
+        GList *aligned_line_list = NULL;
+        align_unprocessed_lines(page_meta_list,
+                                unprocessed_line_hash,
+                                &aligned_line_list);
+        GList *unprocessed_line_list = g_hash_table_get_values(unprocessed_line_hash);                                   
+        GList *list_p = unprocessed_line_list;
+        while(list_p){
+            g_list_free_full(list_p->data,
+                             (GDestroyNotify)g_free);
+            list_p = list_p->next;
+        }
+        g_list_free(unprocessed_line_list);
+        g_hash_table_unref(unprocessed_line_hash);
+        GList *scavenged_toc_line_list = NULL;
+        decompose_lines(aligned_line_list,
+                        &scavenged_toc_line_list,
+                        NULL);
+        g_list_free_full(aligned_line_list,
                          (GDestroyNotify)g_free);
         toc_line_list = g_list_concat(toc_line_list,
-                                      toc_line_list_paged);     
-        g_hash_table_insert(unprocessed_line_hash,
-                            GINT_TO_POINTER(contents_page->meta->page_num),
-                            unprocessed_line_list_paged);    
-        contents_p = contents_p->next;
+                                      scavenged_toc_line_list);
+        toc_line_list = g_list_sort(toc_line_list,
+                                    compare_toc_lines);
+        /* valid toc lines points to valid page labels */
+        list_p = toc_line_list;
+        while(list_p){
+            TOCLine *toc_line = list_p->data;            
+            int page_num = translate_page_label(page_label_num_hash,
+                                                toc_line->page_label);
+            GList *next = list_p->next;
+            if(page_num < 0){                
+                g_free(toc_line->label);
+                g_free(toc_line->id);
+                g_free(toc_line->caption);
+                g_free(toc_line->page_label);
+                g_free(toc_line);
+                toc_line_list = g_list_remove_link(toc_line_list,
+                                              list_p);
+                g_list_free(list_p);
+            }
+            list_p = next;
+        }
+        if(g_list_length(toc_line_list) >= total_lines_of_group * 0.5){
+            final_toc_line_list = toc_line_list;
+            break;
+        }
+        group_p = group_p->prev;
     }
-    GList *aligned_line_list = NULL;
-    align_unprocessed_lines(page_meta_list,
-                            unprocessed_line_hash,
-                            &aligned_line_list);
-    GList *unprocessed_line_list = g_hash_table_get_values(unprocessed_line_hash);                                   
-    GList *list_p = unprocessed_line_list;
-    while(list_p){
-        g_list_free_full(list_p->data,
-                         (GDestroyNotify)g_free);
-        list_p = list_p->next;
-    }
-    g_list_free(unprocessed_line_list);
-    g_hash_table_unref(unprocessed_line_hash);
-    GList *scavenged_toc_line_list = NULL;
-    decompose_lines(aligned_line_list,
-                    &scavenged_toc_line_list,
-                    NULL);
-    g_list_free_full(aligned_line_list,
-                     (GDestroyNotify)g_free);
-    toc_line_list = g_list_concat(toc_line_list,
-                                  scavenged_toc_line_list);
-    toc_line_list = g_list_sort(toc_line_list,
-                                compare_toc_lines);
+    group_p = contents_page_group_list;
+    while(group_p){
+        GList *contents_page_list = group_p->data;
+        GList *contents_p = contents_page_list;
+        while(contents_p){
+            ContentsPage *contents_page = contents_p->data;
+            g_strfreev(contents_page->lines);
+            g_free(contents_page);
+            contents_p = contents_p->next;
+        }
+        g_list_free(contents_page_list);
+        group_p = group_p->next;
+    }   
+    g_list_free(contents_page_group_list); 
     g_print("final toc:\n");
-    list_p = toc_line_list;
+    GList *list_p = final_toc_line_list;
     while(list_p){
         TOCLine *toc_line = list_p->data;
         g_print("label: '%s', id: '%s', caption: '%s', page: '%s'\n",

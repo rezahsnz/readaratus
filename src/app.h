@@ -131,6 +131,7 @@ struct Document
     
     enum ZoomLevel zoom_level;
     
+    GHashTable *page_label_num_hash;
     int num_pages;
     int cur_page_num;
 
