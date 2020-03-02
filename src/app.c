@@ -20,6 +20,7 @@
 #include <pango/pangocairo.h>
 #include <math.h>
 #include "find.h"
+#include "toc_synthesis.h"
 #include "teleport_widget.h"
 #include "find_widget.h"
 #include "page_meta.h"
@@ -254,7 +255,7 @@ goto_page (int page_num,
     {
         return;
     }
-    if(d.toc.max_depth > 0){
+    if(d.toc.head_item){
         g_list_free(d.toc.where);
         d.toc.where = NULL;
         toc_where_am_i(page_num,
@@ -562,16 +563,15 @@ static void
 load_toc(void)
 {
     /* 1: check if document provides TOC */
-    toc_create_from_poppler_index(d.doc,
-                                  &d.toc.head_item,
-                                  &d.toc.max_depth);    
+    // toc_create_from_poppler_index(d.doc,
+    //                               &d.toc.head_item);    
     /* 2: locate contents/index/toc pages */
-    if(1 || !d.toc.head_item){
+    if(!d.toc.head_item){
         g_print("Document provides no index, trying to synthesize TOC from the contents' pages.\n");
-        toc_create_from_contents_pages(d.metae,
+        toc_create_from_contents_pages(d.doc,
+                                       d.metae,
                                        d.page_label_num_hash,
-                                       &d.toc.head_item,
-                                       &d.toc.max_depth);
+                                       &d.toc.head_item);
     }
     /* 3: scan all pages and create TOC */
     if(!d.toc.head_item){
@@ -581,31 +581,28 @@ load_toc(void)
 
     if(d.toc.head_item){
         char *title = poppler_document_get_title(d.doc);
-        if(title){
-            if(strlen(title) == 0){
-                g_free(title);
-                title = g_strdup("Head");
+        d.toc.head_item->title = 
+            (!title || strlen(title) == 0) ? g_strdup("Head")
+                                           : title;
+        toc_flatten(d.toc.head_item,
+                    &d.toc.flattened_items);        
+        GList *list_p = d.toc.flattened_items;
+        while(list_p){
+            TOCItem *toc_item = list_p->data;
+            if(toc_item->label && string_index_in_list(d.toc.labels,
+                                                       toc_item->label,
+                                                       FALSE) < 0)
+            {
+                d.toc.labels = g_list_append(d.toc.labels,
+                                             g_strdup(toc_item->label));
+                d.toc.navigation_button_rects = g_list_append(d.toc.navigation_button_rects,
+                                                              rect_new());
+                d.toc.navigation_button_rects = g_list_append(d.toc.navigation_button_rects,
+                                                              rect_new());
             }
-        }
-        else{
-            title = g_strdup("Head");
-        }
-        d.toc.head_item->title = title;
+            list_p = list_p->next;
+        }           
     }
-    d.toc.flattened_items = NULL;    
-    toc_flatten_items(d.toc.head_item,
-                      &d.toc.flattened_items);
-    d.toc.labels = NULL;
-    toc_get_labels(d.toc.head_item,
-                   &d.toc.labels);
-    d.toc.navigation_button_rects = NULL;
-    for(int i = 0; i < g_list_length(d.toc.labels) * 2; i++){
-        d.toc.navigation_button_rects = g_list_append(d.toc.navigation_button_rects,
-                                                      rect_new());       
-    }    
-    d.toc.origin_x = 0;
-    d.toc.origin_y = 0;
-    d.toc.where = NULL;
 }
 
 static int 
@@ -1320,8 +1317,9 @@ zero_document(void)
     d.cur_page_num = -1;
     /*d.zoom_level = PageFit;*/
     d.toc.head_item = NULL;
-    d.toc.max_depth = 0;
+    d.toc.labels = NULL;
     d.toc.flattened_items = NULL;
+    d.toc.navigation_button_rects = NULL;
     d.toc.where = NULL;
     d.toc.origin_x = 0;
     d.toc.origin_y = 0;
@@ -1434,13 +1432,8 @@ destroy_document(void)
         /* find resutlts */
         g_list_free(meta->find_results);
         /* units */
-        list_p = meta->converted_units;
-        while(list_p){
-            ConvertedUnit *cv = list_p->data;
-            converted_unit_free(cv);
-            list_p = list_p->next;
-        }
-        g_list_free(meta->converted_units);
+        g_list_free_full(meta->converted_units,
+                         (GDestroyNotify)converted_unit_free);
         /* figures */
         if(meta->figures){
             GHashTableIter iter;
@@ -1459,12 +1452,8 @@ destroy_document(void)
             ReferencedFigure *ref_figure = list_p->data;
             g_free(ref_figure->id);
             g_free(ref_figure->label);
-            GList *result_p = ref_figure->find_results;
-            while(result_p){
-                find_result_free(result_p->data);
-                result_p = result_p->next;
-            }
-            g_list_free(ref_figure->find_results);
+            g_list_free_full(ref_figure->find_results,
+                             (GDestroyNotify)find_result_free);
             g_free(ref_figure);
             list_p = list_p->next;
         }
@@ -1479,22 +1468,13 @@ destroy_document(void)
     }
     g_ptr_array_unref(d.metae);
     cairo_surface_destroy(d.image);
-    GList *list_p = d.find_details.find_results;
-    while(list_p){
-        find_result_free(list_p->data);
-        list_p = list_p->next;
-    }
+    g_list_free_full(d.find_details.find_results,
+                     (GDestroyNotify)find_result_free);
     toc_destroy(d.toc.head_item);
-    list_p = d.toc.labels;
-    while(list_p){
-        g_free((char*)list_p->data);
-        list_p = list_p->next;
-    }
-    list_p = d.toc.navigation_button_rects;
-    while(list_p){
-        rect_free(list_p->data);
-        list_p = list_p->next;
-    }    
+    g_list_free_full(d.toc.labels,
+                     (GDestroyNotify)g_free);    
+    g_list_free_full(d.toc.navigation_button_rects,
+                     (GDestroyNotify)rect_free);
     g_list_free(d.toc.flattened_items);
     g_list_free(d.find_details.find_results);
     if(d.go_back_stack){
@@ -1653,6 +1633,26 @@ activate_link (Link *link)
 }
 
 static void
+goto_figure_page(const Figure *figure)
+{
+    PageMeta *meta = g_ptr_array_index(d.metae,
+                                       figure->page_num);
+    double progress_x = figure->image_physical_layout->x1 / meta->page_width;
+    double progress_y = figure->image_physical_layout->y1 / meta->page_height;
+    d.preserved_progress_x = progress_x;
+    d.preserved_progress_y = progress_y;
+    if(figure->page_num != d.cur_page_num){
+        goto_page(figure->page_num,
+                  progress_x, progress_y);
+    }
+    else{
+        scale_page(d.zoom_level, 
+                   TRUE,
+                   progress_x, progress_y);
+    }
+}
+
+static void
 goto_toc_item_page(const TOCItem *toc_item)
 {
     PageMeta *meta = g_ptr_array_index(d.metae,
@@ -1674,29 +1674,9 @@ goto_toc_item_page(const TOCItem *toc_item)
 }
 
 static void
-goto_figure_page(const Figure *figure)
-{
-    PageMeta *meta = g_ptr_array_index(d.metae,
-                                       figure->page_num);
-    double progress_x = figure->image_physical_layout->x1 / meta->page_width;
-    double progress_y = figure->image_physical_layout->y1 / meta->page_height;
-    d.preserved_progress_x = progress_x;
-    d.preserved_progress_y = progress_y;
-    if(figure->page_num != d.cur_page_num){
-        goto_page(figure->page_num,
-                  progress_x, progress_y);
-    }
-    else{
-        scale_page(d.zoom_level, 
-                   TRUE,
-                   progress_x, progress_y);
-    }
-}
-
-static void
 previous_subsection(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1706,27 +1686,20 @@ previous_subsection(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Subsection){
+        if(toc_get_item_type(toc_item->label) == Subsection &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Subsection)
+        {
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *subsection_item = item_p->data;        
-        if(subsection_item->previous){            
-            goto_toc_item_page(subsection_item->previous);
-        }
-        else{
-            g_print("No subsections before.\n");
-        }
+        goto_toc_item_page(subsection_item->previous);
     }
     g_list_free(where);    
 }
@@ -1734,7 +1707,7 @@ previous_subsection(void)
 static void
 next_subsection(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1744,15 +1717,12 @@ next_subsection(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Subsection){
+        if(toc_get_item_type(toc_item->label) == Subsection &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Subsection)
+        {
             break;
         }
         item_p = item_p->next;
@@ -1769,9 +1739,6 @@ next_subsection(void)
         if(next_subsection_item){
             goto_toc_item_page(next_subsection_item);
         }
-        else{
-            g_print("No more subsections ahead.\n");
-        }
     }
     g_list_free(where);
 }
@@ -1779,7 +1746,7 @@ next_subsection(void)
 static void
 previous_section(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1789,27 +1756,19 @@ previous_section(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Section){
+        if(toc_get_item_type(toc_item->label) == Section &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Section){
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *section_item = item_p->data;
-        if(section_item->previous){
-            goto_toc_item_page(section_item->previous);
-        }
-        else{
-            g_print("No sections before.\n");
-        }
+        goto_toc_item_page(section_item->previous);
     }
     g_list_free(where);    
 }
@@ -1817,7 +1776,7 @@ previous_section(void)
 static void
 next_section(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1827,15 +1786,12 @@ next_section(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Section){
+        if(toc_get_item_type(toc_item->label) == Section &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Section)
+        {
             break;
         }
         item_p = item_p->next;
@@ -1852,48 +1808,37 @@ next_section(void)
         if(next_section_item){
             goto_toc_item_page(next_section_item);
         }
-        else{
-            g_print("No more sections ahead.\n");
-        }
-    }
-    
+    }    
     g_list_free(where);
 }
 
 static void
 previous_chapter(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
     toc_where_am_i(d.cur_page_num,
-               d.toc.head_item,
-               &where);
+                   d.toc.head_item,
+                   &where);
     if(!where){
-        return;
-    }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
         return;
     }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Chapter){
+        if(toc_get_item_type(toc_item->label) == Chapter &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Chapter)
+        {
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *chapter_item = item_p->data;
-        if(chapter_item->previous){
-            goto_toc_item_page(chapter_item->previous);
-        }
-        else{
-            g_print("No chapters before.\n");
-        }
+        goto_toc_item_page(chapter_item->previous);
     }
     g_list_free(where);    
 }
@@ -1901,7 +1846,7 @@ previous_chapter(void)
 static void
 next_chapter(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1911,15 +1856,12 @@ next_chapter(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Chapter){
+        if(toc_get_item_type(toc_item->label) == Chapter &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Chapter)
+        {
             break;
         }
         item_p = item_p->next;
@@ -1936,9 +1878,6 @@ next_chapter(void)
         if(next_chapter_item){
             goto_toc_item_page(next_chapter_item);
         }
-        else{
-            g_print("No more chapters ahead.\n");
-        }
     }
     g_list_free(where);
 }
@@ -1946,7 +1885,7 @@ next_chapter(void)
 static void
 previous_part(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1956,27 +1895,19 @@ previous_part(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Part){
+        if(toc_get_item_type(toc_item->label) == Part &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Part){
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *part_item = item_p->data;
-        if(part_item->previous){
-            goto_toc_item_page(part_item->previous);
-        }
-        else{
-            g_print("No parts before.\n");
-        }
+        goto_toc_item_page(part_item->previous);
     } 
     g_list_free(where);    
 }
@@ -1984,7 +1915,7 @@ previous_part(void)
 static void
 next_part(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -1994,15 +1925,12 @@ next_part(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Part){
+        if(toc_get_item_type(toc_item->label) == Part &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Part)
+        {
             break;
         }
         item_p = item_p->next;
@@ -2018,9 +1946,6 @@ next_part(void)
         }
         if(next_part_item){
             goto_toc_item_page(next_part_item);
-        }
-        else{
-            g_print("No more parts ahead.\n");
         }
     }
     g_list_free(where);
@@ -2104,33 +2029,11 @@ teleport(const char *term)
     }
     g_match_info_free(match_info);
     /* object is toc_item, e.g. chapter 1.2 */
-    if(d.toc.max_depth > 0){
-        gboolean found = FALSE;
-        GList *items = toc_extract_items(object_name);
-        if(items){
-            TOCItem *toc_item = items->data;
-            const TOCItem *target_item = toc_search_by_id(d.toc.head_item,
-                                                          toc_item->label, 
-                                                          toc_item->id);
-            if(target_item){
-                goto_toc_item_page(target_item);
-                found = TRUE;
-            }
-            g_free(toc_item->label);
-            g_free(toc_item->id);
-            g_free(toc_item);
-            g_list_free(items);
-        }
-        else{
-            /* object is non-sequencible toc_item: e.g. notes, bibliography, ... */
-            const TOCItem *target_item = toc_search_by_title(d.toc.head_item,
-                                                             object_name);
-            if(target_item){
-                goto_toc_item_page(target_item);
-                found = TRUE;
-            }
-        }
-        if(found){
+    if(d.toc.head_item){
+        const TOCItem *target_item = toc_search_by_title(d.toc.head_item,
+                                                         object_name);
+        if(target_item){
+            goto_toc_item_page(target_item);
             g_free(object_name);
             return;
         }
@@ -3174,7 +3077,7 @@ draw_toc_mode(cairo_t *cr)
 {
     int widget_width = gtk_widget_get_allocated_width(ui.vellum);
     int widget_height = gtk_widget_get_allocated_height(ui.vellum);
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         Rect wr;
         wr.x1 = wr.y1 = 0;
         wr.x2 = widget_width;
@@ -3575,13 +3478,6 @@ key_press_callback(GtkWidget   *widget,
             if(ui.app_mode == ReadingMode){
                 zoom_width_fit();
             }
-            // else if(ui.app_mode == TOCMode){
-            //     if(d.toc.max_depth > 0){
-            //         TOCItem *toc_item = g_list_last(d.toc.where)->data;
-            //         d.toc.origin_y = toc_item->rect->y1;
-            //         gtk_widget_queue_draw(ui.vellum);
-            //     }
-            // }
             break;
         case GDK_KEY_f:
         case GDK_KEY_F:
@@ -3810,7 +3706,7 @@ button_press_callback (GtkWidget      *widget,
         }
     }
     else if(ui.app_mode == TOCMode){
-        if(d.toc.max_depth == 0){
+        if(!d.toc.head_item){
             switch_app_mode(ReadingMode);            
         }
         else{

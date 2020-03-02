@@ -50,19 +50,6 @@ compare_poppler_rects(const void *a,
 int
 compare_find_results(const void *a,
                      const void *b);
-void
-match_found_rects(GList  *list_p,
-                  Rect   *prev_rect,
-                  double  mean_line_height,
-                  GList **matched_rects);
-
-void
-find_rects_of_text(PageMeta *meta,
-                   GRegex   *regex,
-                   gboolean  is_dualpage,
-                   gboolean  is_whole_words,
-                   GList   **find_results);
-
 GList *
 find_text(const GPtrArray *metae,
           const char *find_term,

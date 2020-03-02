@@ -25,9 +25,9 @@ enum TOCType
 {
     None = 0,
     Subsection = 10,
-    Section = 11,
-    Chapter = 12,
-    Part = 13
+    Section = 20,
+    Chapter = 30,
+    Part = 40
 };
 typedef struct TOCItem TOCItem;
 struct TOCItem
@@ -35,17 +35,17 @@ struct TOCItem
     char *title;
     char *label;
     char *id;
-	  int depth;
-	  int page_num;
-	  int length;
+	int depth;
+	int page_num;
+	int length;
     Rect *rect;
-	  TOCItem *parent;
+	TOCItem *parent;
     TOCItem *next;
     TOCItem *previous;
-	  GList *children;
+	GList *children;
 	
     double offset_x;
-	  double offset_y;
+	double offset_y;
 };
 
 
@@ -64,15 +64,21 @@ toc_item_free(TOCItem *toc_item);
 void
 toc_dump(TOCItem *toc_item);
 
+void 
+toc_calc_length(TOCItem *toc_item);
+
 TOCItem 
 toc_find_dest(PopplerDocument *doc,
 	       	    PopplerDest     *dest);
 
+void
+toc_fix_depth(TOCItem *toc_item);
+
+void
+toc_fix_sibling_links(TOCItem *toc_item);
+
 enum TOCType
 toc_get_item_type(const char *label);
-
-GList *
-toc_extract_items(const char *text);
 
 const TOCItem *
 toc_search_by_id(const TOCItem *head_item,
@@ -83,35 +89,32 @@ const TOCItem *
 toc_search_by_title(const TOCItem *toc_item,
                     const char    *title);
 
+char *
+toc_infer_child_label(const char *label_parent);
+
+int
+string_index_in_list(GList      *list,
+                     const char *needle,
+                     gboolean    is_case_sensitive);
+
 void
 toc_create_from_poppler_index(PopplerDocument *doc,
-                              TOCItem        **head_item,
-                              int             *max_toc_depth);
+                              TOCItem        **head_item);
 
 int
 translate_page_label(GHashTable *page_label_num_hash,
                      const char *label);
 
 void
-toc_create_from_contents_pages(GPtrArray  *page_meta_list,
-                               GHashTable *page_label_num_hash,
-                               TOCItem   **head_item,
-                               int       *max_toc_depth);
-
-void
 toc_destroy(TOCItem *head_item);
 
 void
-toc_flatten_items(TOCItem *toc_item,
-                  GList  **flattened_item_list);
+toc_flatten(TOCItem *toc_item,
+            GList  **flattened_item_list);
 
 void
 toc_where_am_i(int      page_num,
                TOCItem *toc_item,
                GList  **where);
-
-void
-toc_get_labels(const TOCItem *toc_item,
-               GList        **labels);
 
 #endif

@@ -95,7 +95,7 @@ compare_find_results(const void *a,
     return comp;    
 }
 
-void
+static void
 match_found_rects(GList  *list_p,
                   Rect   *prev_rect,
                   double  mean_line_height,
@@ -133,7 +133,7 @@ match_found_rects(GList  *list_p,
     g_list_free(candidate_rects);
 }
 
-void
+static void
 find_rects_of_text(PageMeta *meta,
                    GRegex   *regex,
                    gboolean  is_dualpage,
@@ -494,7 +494,10 @@ find_text(const GPtrArray *metae,
           gboolean         is_dualpage,
           gboolean         is_whole_words)
 { 
-    if(!metae){
+    if(!metae || !find_term || strlen(find_term) == 0 ||
+       start_page < 0 || pages_length <= 0)
+    {
+        g_print("invalid find request\n");
         return NULL;
     }   
     GError *err = NULL;  
