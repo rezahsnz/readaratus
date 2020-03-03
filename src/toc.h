@@ -23,16 +23,16 @@
 
 enum TOCType
 {
-        None = 0,
-        Subsection = 10,
-        Section = 11,
-        Chapter = 12,
-        Part = 13
+    None = 0,
+    Subsection = 10,
+    Section = 20,
+    Chapter = 30,
+    Part = 40
 };
 typedef struct TOCItem TOCItem;
 struct TOCItem
 {
-	char *title;
+    char *title;
     char *label;
     char *id;
 	int depth;
@@ -48,6 +48,7 @@ struct TOCItem
 	double offset_y;
 };
 
+
 void
 toc_module_init(void);
 
@@ -60,19 +61,27 @@ toc_item_new(void);
 void 
 toc_item_free(TOCItem *toc_item);
 
-
 void
 toc_dump(TOCItem *toc_item);
 
+void 
+toc_calc_length(TOCItem *toc_item);
+
 TOCItem 
 toc_find_dest(PopplerDocument *doc,
-	       	  PopplerDest     *dest);
+	       	    PopplerDest     *dest);
+
+void
+toc_fix_depth(TOCItem *toc_item);
+
+void
+toc_fix_sibling_links(TOCItem *toc_item);
+
+void toc_fix_labels(TOCItem *toc_item,
+                    const char *label_parent);
 
 enum TOCType
 toc_get_item_type(const char *label);
-
-GList *
-toc_extract_items(const char *text);
 
 const TOCItem *
 toc_search_by_id(const TOCItem *head_item,
@@ -83,25 +92,32 @@ const TOCItem *
 toc_search_by_title(const TOCItem *toc_item,
                     const char    *title);
 
+char *
+toc_infer_child_label(const char *label_parent);
+
+int
+string_index_in_list(GList      *list,
+                     const char *needle,
+                     gboolean    is_case_sensitive);
+
 void
-toc_create(PopplerDocument *doc,
-           TOCItem        **head_item,
-           int              *max_toc_depth);
+toc_create_from_poppler_index(PopplerDocument *doc,
+                              TOCItem        **head_item);
+
+int
+translate_page_label(GHashTable *page_label_num_hash,
+                     const char *label);
 
 void
 toc_destroy(TOCItem *head_item);
 
 void
-toc_flatten_items(TOCItem *toc_item,
-                  GList  **flattened_item_list);
+toc_flatten(TOCItem *toc_item,
+            GList  **flattened_item_list);
 
 void
 toc_where_am_i(int      page_num,
                TOCItem *toc_item,
                GList  **where);
-
-void
-toc_get_labels(const TOCItem *toc_item,
-               GList        **labels);
 
 #endif
