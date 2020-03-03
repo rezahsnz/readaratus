@@ -179,7 +179,7 @@ double euclid_dist(Rect *a,
 }
 
 void
-dump_rect (Rect *rect)
+rect_dump(Rect *rect)
 {
     g_print("tl(%f, %f), br(%f, %f), w: %f, h: %f\n",
             rect->x1,
@@ -250,4 +250,43 @@ rect_lists_intersect(GList *rects_a,
         rect_a_p = rect_a_p->next;
     }
     return rect_a_p ? TRUE : FALSE;
+}
+
+
+int
+rect_xy_compare(const void *a,
+             const void *b)
+{
+    int comp;
+    const Rect *rect_a = a;
+    const Rect *rect_b = b;
+    if((rect_a->y1 < rect_b->y1) ||
+       (rect_a->y1 == rect_b->y1 &&
+        rect_a->x1 < rect_b->x1))
+    {
+        comp = -1;
+    }
+    else{
+        comp = 1;
+    }
+    /* desc y, asc x*/
+    return -comp;
+}
+
+int
+rect_x_compare(const void *a,
+               const void *b)
+{
+    const Rect *rect_a = a;
+    const Rect *rect_b = b;
+    return rect_a->x1 - rect_b->x1;
+}
+
+int
+rect_y_compare(const void *a,
+               const void *b)
+{
+    const Rect *rect_a = a;
+    const Rect *rect_b = b;
+    return rect_a->y1 - rect_b->y1;
 }

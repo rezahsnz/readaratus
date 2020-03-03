@@ -92,7 +92,7 @@ euclid_dist(Rect *,
             Rect *);
 
 void
-dump_rect (Rect *);
+rect_dump(Rect *);
 
 gboolean
 rects_have_intersection(Rect *a,
@@ -104,5 +104,17 @@ rect_intersects_rect_list(Rect  *x,
 gboolean
 rect_lists_intersect(GList *rects_a,
                      GList *rects_b);
+
+int
+rect_xy_compare(const void *a,
+             const void *b);
+
+int
+rect_x_compare(const void *a,
+               const void *b);
+
+int
+rect_y_compare(const void *a,
+               const void *b);
 
 #endif

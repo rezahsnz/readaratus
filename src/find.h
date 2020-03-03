@@ -19,6 +19,7 @@
 #define FIND_H
 
 #include "rect.h"
+#include "page_meta.h"
 
 typedef struct FindResult FindResult;
 struct FindResult
@@ -37,6 +38,25 @@ find_result_new();
 
 void
 find_result_free(FindResult *fr);
+
+int
+compare_rects(const void *a,
+              const void *b);
+
+int
+compare_poppler_rects(const void *a,
+                      const void *b);
+
+int
+compare_find_results(const void *a,
+                     const void *b);
+GList *
+find_text(const GPtrArray *metae,
+          const char *find_term,
+          int         start_page,
+          int         pages_length,
+          gboolean    is_dualpage,
+          gboolean    is_whole_words);
 
 
 #endif

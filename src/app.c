@@ -16,11 +16,16 @@
  */
 
 #include "app.h"
+#include <cairo.h>
+#include <pango/pangocairo.h>
 #include <math.h>
+#include "find.h"
+#include "toc_synthesis.h"
 #include "teleport_widget.h"
 #include "find_widget.h"
 #include "page_meta.h"
-#include <pango/pangocairo.h>
+#include "unit_convertor.h"
+#include "roman_numeral.h"
 
 /* gainsboro: #DCDCDC, (220, 220, 220) */
 static const double gainsboro_r = 0.8627;
@@ -52,7 +57,6 @@ static const double blue_r = 0,
 static const double dashed_style[2] = {8, 5};
 static const int num_dashes = 2;
 static const double toc_navigation_panel_height = 72;
-static GRegex *navigation_regex = NULL;
 
 static void 
 pose_page_widgets(void)
@@ -211,7 +215,7 @@ scale_page (enum ZoomLevel zl,
 
 static void
 zoom_page_fit(void)
-{
+{    
     scale_page(PageFit,
                TRUE,
                0, 0);    
@@ -250,7 +254,7 @@ goto_page (int page_num,
     {
         return;
     }
-    if(d.toc.max_depth > 0){
+    if(d.toc.head_item){
         g_list_free(d.toc.where);
         d.toc.where = NULL;
         toc_where_am_i(page_num,
@@ -381,767 +385,6 @@ scroll_with_pixels(double dx,
     }
 }
 
-static int compare_rects(const void *a,
-                         const void *b)
-{
-    int comp;
-    const Rect *rect_a = a;
-    const Rect *rect_b = b;
-    if((rect_a->y1 < rect_b->y1) ||
-       (rect_a->y1 == rect_b->y1 &&
-        rect_a->x1 < rect_b->x1))
-    {
-        comp = -1;
-    }
-    else{
-        comp = 1;
-    }
-    /* desc y, asc x*/
-    return -comp;
-}
-
-static void
-match_found_rects(GList  *list_p,
-                  Rect   *prev_rect,
-                  double  mean_line_height,
-                  GList **matched_rects)
-{    
-    if(!list_p){
-        return;
-    }
-    GList *candidate_rects = NULL;
-    double prev_center_y = rect_center_y(prev_rect);
-    GList *rects = list_p->data;
-    GList *rect_p = rects;
-    while(rect_p){
-        Rect *rect = rect_p->data;
-        double center_y = rect_center_y(rect);
-        if((center_y > prev_center_y) &&
-           ((center_y - prev_center_y) <= (mean_line_height * 1.9)))
-        {
-            candidate_rects = g_list_append(candidate_rects,
-                                            rect);
-        }
-        rect_p = rect_p->next;
-    }
-    if(candidate_rects){
-        candidate_rects = g_list_sort(candidate_rects,
-                                      compare_rects);
-        Rect *rect = g_list_first(candidate_rects)->data;
-        *matched_rects = g_list_append(*matched_rects,
-                                       rect);
-        match_found_rects(list_p->next,
-                          rect,
-                          mean_line_height,
-                          matched_rects);
-    }
-    g_list_free(candidate_rects);
-}
-
-static int compare_poppler_rects(const void *a,
-                                 const void *b)
-{
-    int comp;
-    const PopplerRectangle *rect_a = a;
-    const PopplerRectangle *rect_b = b;
-    if((rect_a->y1 < rect_b->y1) ||
-       (rect_a->y1 == rect_b->y1 &&
-        rect_a->x1 > rect_b->x1))
-    {
-        comp = -1;
-    }
-    else{
-        comp = 1;
-    }
-    /* desc y, asc x */
-    return -comp;
-}
-
-
-static int
-compare_find_results(const void *a,
-                     const void *b)
-{
-    const FindResult *fr_a = a;
-    const FindResult *fr_b = b;
-    int comp = fr_a->page_num - fr_b->page_num;
-    if(comp == 0){
-        const Rect *rect_a = fr_a->physical_layouts->data;
-        const Rect *rect_b = fr_b->physical_layouts->data;
-        /* asc y, asc  x */
-        if((rect_a->y1 < rect_b->y1) ||
-           (rect_a->y1 == rect_b->y1 &&
-            rect_a->x1 < rect_b->x1))
-        {
-            comp = -1;
-        }
-        else{
-            comp = 1;
-        }
-    }
-    return comp;    
-}
-
-static void
-find_rects_of_text(PageMeta *meta,
-                   GRegex   *regex,
-                   gboolean  is_dualpage,
-                   gboolean  is_whole_words,
-                   GList   **find_results)
-{
-    int poppler_find_options = 0;
-    poppler_find_options |= is_whole_words ? POPPLER_FIND_WHOLE_WORDS_ONLY : 0;
-    if(poppler_find_options == 0){
-        poppler_find_options = POPPLER_FIND_DEFAULT;
-    }
-
-    GMatchInfo *match_info = NULL;
-    g_regex_match(regex,
-                  meta->text,
-                  0,
-                  &match_info);
-    const char *pattern = g_regex_get_pattern(regex);
-    GList *already_matched_rects = NULL;
-    gboolean is_flattend = FALSE;
-    while(g_match_info_matches(match_info)){
-        char *match = g_match_info_fetch(match_info,
-                                         0);
-        char **tokens = g_regex_split_simple("\\R",
-                                             match,
-                                             0,
-                                             0);
-        int num_tokens = g_strv_length(tokens);
-        /* a: flatten match */
-        if(!is_flattend){
-            char *flattened_match = g_strjoinv(" ",
-                                               tokens);
-            GList *pop_rects = poppler_page_find_text_with_options(meta->page,
-                                                                   flattened_match,
-                                                                   (PopplerFindFlags)poppler_find_options);
-            GList *rect_p = pop_rects;
-            while(rect_p){
-                PopplerRectangle *pr = rect_p->data;
-                pr->y1 = meta->page_height - pr->y1;
-                pr->y2 = meta->page_height - pr->y2;
-                Rect *rect = rect_from_poppler_rectangle(pr);
-                poppler_rectangle_free(pr);
-                double rect_cy = rect_center_y(rect);
-                if(is_dualpage){
-                    gboolean is_valid = TRUE;
-                    /* prefix: rect must be rightmost */
-                    if(pattern[0] != '^'){
-                        for(int i = 0; i < meta->num_layouts; i++){
-                            Rect *text_rect = g_ptr_array_index(meta->physical_text_layouts,
-                                                                i);
-                            double text_cy = rect_center_y(text_rect);
-                            if(fabs(text_cy - rect_cy) < (meta->mean_line_height * 0.05) &&
-                               text_rect->x1 >= rect->x2)
-                            {
-                                is_valid = FALSE;
-                                break;
-                            }
-                            if(text_cy - rect_cy > 2 * meta->mean_line_height){
-                                break;
-                            }
-                        }                        
-                    }
-                    /* postfix: rect must be leftmost */
-                    else{
-                        for(int i = 0; i < meta->num_layouts; i++){
-                            Rect *text_rect = g_ptr_array_index(meta->physical_text_layouts,
-                                                                i);
-                            double text_cy = rect_center_y(text_rect);
-                            if(fabs(text_cy - rect_cy) < (meta->mean_line_height * 0.05) &&
-                               text_rect->x1 < rect->x1)
-                            {
-                                is_valid = FALSE;
-                                break;
-                            }
-                            if(text_cy - rect_cy > 2 * meta->mean_line_height){
-                                break;
-                            }
-                        } 
-                    }
-                    if(!is_valid){
-                        rect_free(rect);
-                        rect_p = rect_p->next;  
-                        continue;
-                    }
-                }
-                FindResult *find_result = find_result_new();
-                find_result->page_num = meta->page_num;
-                find_result->match = g_strdup(flattened_match);
-                find_result->physical_layouts = g_list_append(find_result->physical_layouts,
-                                                              rect);
-                *find_results = g_list_append(*find_results,
-                                              find_result);
-                already_matched_rects = g_list_append(already_matched_rects,
-                                                      rect);
-                rect_p = rect_p->next;                    
-            }
-            g_free(flattened_match);
-            g_list_free(pop_rects);
-            is_flattend = TRUE;
-        }
-        if(num_tokens == 1){
-            g_free(match);
-            g_strfreev(tokens);
-            g_match_info_next(match_info,
-                              NULL);
-            continue;
-        }
-        /* b: split match by 'new line' and perform line matching */
-        GList *list_of_rects = NULL;
-        char **token_p = tokens;
-        while(*token_p){
-            GList *rects = NULL;
-            GList *pop_rects = poppler_page_find_text_with_options(meta->page,
-                                                                   *token_p,
-                                                                   (PopplerFindFlags)poppler_find_options);
-            if(!pop_rects){                   
-                g_print("poppler failed to find: '%s' part of '%s'\n",
-                        *token_p, match); 
-            }          
-            pop_rects = g_list_sort(pop_rects,
-                                    compare_poppler_rects);
-            GList *rect_p = pop_rects;                
-            while(rect_p){
-                PopplerRectangle *pr = rect_p->data;
-                pr->y1 = meta->page_height - pr->y1;
-                pr->y2 = meta->page_height - pr->y2;
-                Rect *rect = rect_from_poppler_rectangle(pr);
-                poppler_rectangle_free(pr);
-                GList *already_p = already_matched_rects;
-                while(already_p){
-                    if(rects_have_intersection(rect,
-                                               already_p->data)){
-                        break;
-                    }
-                    already_p = already_p->next;
-                }
-                if(!already_p){
-                    rects = g_list_append(rects,
-                                          rect);
-                }
-                else{
-                    rect_free(rect);
-                }
-                rect_p = rect_p->next;
-            }
-            g_list_free(pop_rects);
-            if(rects){         
-                /* at most one rect per line: the first line contains the
-                   rightmost rect and subsequent lines contain lefmost rects */
-                GList *one_per_line_rects = NULL;
-                GList *seen_lines = NULL;
-                rect_p = rects;
-                while(rect_p){
-                    if(g_list_find(seen_lines,
-                                   rect_p->data))
-                    {
-                        rect_p = rect_p->next;
-                        continue;
-                    }
-                    Rect *rect_base = rect_p->data;
-                    GList *same_line_rects = NULL;
-                    same_line_rects = g_list_append(same_line_rects,
-                                                    rect_base);
-                    double base_center_y = rect_center_y(rect_base);
-                    GList *next_p = rect_p->next;
-                    while(next_p){
-                        if(g_list_find(seen_lines,
-                                       next_p->data))
-                        {
-                            next_p = next_p->next;
-                            continue;
-                        }
-                        Rect *rect_next = next_p->data;
-                        double next_center_y = rect_center_y(rect_next);
-                        if(fabs(next_center_y - base_center_y) < 0.05 * meta->mean_line_height){
-                            same_line_rects = g_list_append(same_line_rects,
-                                                            rect_next);
-                        }
-                        next_p = next_p->next;
-                    }
-                    if(list_of_rects){
-                        /* leftmost rect */                                                                                
-                        one_per_line_rects = g_list_append(one_per_line_rects,
-                                                           g_list_first(same_line_rects)->data);
-                    }
-                    else{
-                        /* rightmost rect*/
-                        gboolean is_postfix = is_dualpage && (pattern[0] != '^');
-                        one_per_line_rects = g_list_append(one_per_line_rects,
-                                                           is_postfix ? g_list_first(same_line_rects)->data
-                                                                      : g_list_last(same_line_rects)->data);
-                    }
-                    seen_lines = g_list_concat(seen_lines,
-                                               same_line_rects);
-                    rect_p = rect_p->next;
-                }
-                list_of_rects = g_list_append(list_of_rects,
-                                              one_per_line_rects);
-                g_list_free(seen_lines);
-                g_list_free(rects);
-            }
-            token_p++;
-        }
-        if(g_list_length(list_of_rects) == num_tokens){
-            /* remove rects from list until the max size of any list is <= the smallest list,
-               only retain vertically close rects */
-            GList *cur_list_p = list_of_rects;
-            while(cur_list_p){
-                if(cur_list_p->next){
-                    GList *cur_rects = cur_list_p->data;  
-                    int cur_list_size = g_list_length(cur_rects);                                                                      
-                    GList *next_rects = cur_list_p->next->data;
-                    int next_list_size = g_list_length(next_rects);
-                    if(cur_list_size == next_list_size){
-                        cur_list_p = cur_list_p->next;
-                        continue;
-                    }
-                    GList *edited_large_rects = NULL;
-                    GList *small_rects = cur_list_size < next_list_size ? cur_rects : next_rects;
-                    GList *large_rects =  cur_list_size > next_list_size ? cur_rects : next_rects;
-                    double dist_sign = small_rects == cur_rects ? 1 : -1;
-                    GList *small_p = small_rects;
-                    while(small_p){
-                        Rect *rect_small = small_p->data;
-                        double small_center_y = rect_center_y(rect_small);
-                        double min_dist = meta->page_height;
-                        Rect *closest_rect = NULL;
-                        GList *large_p = large_rects;
-                        while(large_p){
-                            Rect *rect_large = large_p->data;
-                            if(!g_list_find(edited_large_rects,
-                                            rect_large))
-                            {
-                                double large_center_y = rect_center_y(rect_large);
-                                double dist = dist_sign * (small_center_y - large_center_y);
-                                if(dist < min_dist && (fabs(dist) > meta->mean_line_height * 0.05)){
-                                    min_dist = small_center_y - large_center_y;
-                                    closest_rect = rect_large;
-                                }
-                            }
-                            large_p = large_p->next;
-                        }
-                        edited_large_rects = g_list_append(edited_large_rects,
-                                                           closest_rect);
-                        small_p = small_p->next;
-                    }
-                    if(large_rects == cur_rects){
-                        cur_list_p->data = edited_large_rects;
-                    }
-                    else{
-                        cur_list_p->next->data = edited_large_rects;
-                    }
-                    GList *large_p = large_rects;
-                    while(large_p){
-                        if(!g_list_find(edited_large_rects,
-                                        large_p->data))
-                        {
-                            rect_free(large_p->data);
-                        }
-                        large_p = large_p->next;
-                    }
-                    g_list_free(large_rects);
-                }
-                cur_list_p = cur_list_p->next;
-            }
-            GList *rect_p = list_of_rects->data;
-            while(rect_p){
-                Rect *rect = rect_p->data;   
-                double rect_cy = rect_center_y(rect);                   
-                /* make sure the first rect is right-most except for multipage postfix rects */
-                gboolean is_rightmost = TRUE;
-                if((num_tokens > 1) && !(is_dualpage && pattern[0] == '^')){
-                    for(int i = 0; i < meta->num_layouts; i++){
-                        Rect *text_rect = g_ptr_array_index(meta->physical_text_layouts,
-                                                            i);
-                        double text_cy = rect_center_y(text_rect);
-                        if(fabs(text_cy - rect_cy) < (meta->mean_line_height * 0.05) &&
-                           text_rect->x1 >= rect->x2)
-                        {
-                            is_rightmost = FALSE;
-                            break;
-                        }
-                        if(text_cy - rect_cy > 2 * meta->mean_line_height){
-                            break;
-                        }
-                    }
-                }           
-                if(!is_rightmost){
-                    rect_p = rect_p->next;
-                    continue;
-                }      
-                GList *matched_rects = NULL;
-                matched_rects = g_list_append(matched_rects,
-                                              rect);
-                match_found_rects(list_of_rects->next,
-                                  rect,
-                                  meta->mean_line_height,
-                                  &matched_rects);
-                if(g_list_length(matched_rects) == num_tokens){
-                    FindResult *find_result = find_result_new();
-                    find_result->page_num = meta->page_num;
-                    find_result->match = g_strdup(match);
-                    GList *ma_rect_p = matched_rects;        
-                    while(ma_rect_p){
-                        Rect *fr_rect = ma_rect_p->data;
-                        find_result->physical_layouts = g_list_append(find_result->physical_layouts,
-                                                                      rect_copy(fr_rect));
-                        ma_rect_p = ma_rect_p->next;
-                    }       
-                    *find_results = g_list_append(*find_results,
-                                                  find_result);                        
-                }
-                g_list_free(matched_rects);                    
-                rect_p = rect_p->next;
-            }
-        }
-        GList *list_p = list_of_rects;
-        while(list_p){
-            GList *rects = list_p->data;
-            GList *rect_p = rects;
-            while(rect_p){
-                rect_free(rect_p->data);
-                rect_p = rect_p->next;
-            }
-            g_list_free(rects);
-            list_p = list_p->next;
-        }
-        g_list_free(list_of_rects);            
-        g_strfreev(tokens);
-        g_free(match);
-        g_match_info_next(match_info,
-                          NULL);
-    }
-    g_match_info_free(match_info);
-    g_list_free(already_matched_rects);
-    if(is_dualpage){
-        *find_results = g_list_sort(*find_results,
-                                    compare_find_results);
-        GList *single_p = (pattern[0] == '^') ? g_list_first(*find_results)
-                                              : g_list_last(*find_results);
-        GList *rem_list = g_list_remove_link(*find_results,
-                                             single_p);
-        *find_results = single_p;
-        GList *list_p = rem_list;
-        while(list_p){
-            find_result_free(list_p->data);
-            list_p = list_p->next;
-        }
-        g_list_free(rem_list);
-    }
-}
-
-static GList *
-find_text(const char *find_term,
-          int         start_page,
-          int         pages_length,
-          gboolean    is_dualpage,
-          gboolean    is_whole_words)
-{ 
-    if(!d.metae){
-        return NULL;
-    }   
-    GError *err = NULL;  
-    GRegex *nl_regex = g_regex_new(
-        "\\R+",
-        0,
-        0,
-        &err);
-    if(!nl_regex){
-        g_print("nl_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);
-    } 
-    char *no_nl_term = g_regex_replace(nl_regex,
-                                       find_term,
-                                       -1,
-                                       0,
-                                       " ",
-                                       0,
-                                       NULL);
-    GRegex *trimmer_regex = g_regex_new(
-        "^\\s+|\\s+$",
-        0,
-        0,
-        &err);
-    if(!trimmer_regex){
-        g_print("trimmer_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);
-    }
-    char *cleaned_term = g_regex_replace(trimmer_regex,
-                                         no_nl_term,
-                                         -1,
-                                         0,
-                                         "",
-                                         0,
-                                         NULL);
-    g_free(no_nl_term);
-    g_regex_unref(nl_regex);
-    g_regex_unref(trimmer_regex);
-    gboolean term_has_whitespace = g_regex_match_simple("\\s",
-                                                        cleaned_term,
-                                                        0,
-                                                        0);
-    char *temp = cleaned_term;
-    cleaned_term = g_regex_escape_string(temp,
-                                         -1);
-    g_free(temp);
-    int term_len = strlen(cleaned_term);
-    GString *dashed_term = g_string_sized_new(term_len * 7);
-    for(int i = 0; i < strlen(cleaned_term); i++){
-        dashed_term = g_string_append_c(dashed_term,
-                                        cleaned_term[i]);
-        if((cleaned_term[i] != '\\') && (i < strlen(cleaned_term) - 1)){             
-            dashed_term = g_string_append(dashed_term,
-                                          cleaned_term[i] != '-' ? "(-\\R+)?"
-                                                                 : "\\R+");
-        }
-    }   
-    GRegex *whitespace_regex = g_regex_new(
-        "\\s+",
-        0,
-        0,
-        &err);
-    if(!whitespace_regex){
-        g_print("whitespace_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);
-    }    
-    err = NULL;
-    char *pattern = g_regex_replace_literal(whitespace_regex,
-                                            dashed_term->str,
-                                            -1,
-                                            0,
-                                            "(\\R|\\s)+",
-                                            0,
-                                            &err);
-    if(err){
-        g_print("whitespace_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);   
-    }
-    g_regex_unref(whitespace_regex);
-    g_string_free(dashed_term,
-                  TRUE);
-    if(is_whole_words){
-        temp = pattern;
-        pattern = g_strdup_printf("\\b%s\\b",
-                                  pattern);
-        g_free(temp);
-    }
-    err = NULL;
-    GRegex *multiline_regex = g_regex_new(
-        pattern,
-        G_REGEX_CASELESS,
-        0,
-        &err);
-    if(!multiline_regex){
-        g_print("multiline_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);
-    }          
-    
-    GList *find_results = NULL;
-    for(int page_num = start_page; page_num < start_page + pages_length; page_num++){
-        PageMeta *meta = g_ptr_array_index(d.metae,
-                                           page_num);              
-        /* 1: tokenize the term with word-wraps(dashes followd by newline)" and try again.
-              if 'adios' is requested, we try to find
-              {'a-\ndios', 'ad-\niso', 'adi-\nos', 'adio-\ns'}           
-           2: each whitespace might be a newline so we suppose whitespaces are newlines and try again.
-              if 'adios pegasus camus' is requested, we try to find
-              {'adios\npegasus camus', 'adios\npegasus\ncamus', 'adios pegasus\ncamus'}
-        */  
-        if(strlen(meta->text) >= term_len){
-            GList *results = NULL;
-            find_rects_of_text(meta,
-                               multiline_regex,
-                               FALSE,
-                               is_whole_words,
-                               &results);
-            find_results = g_list_concat(find_results,
-                                         results);
-        }
-    } 
-    g_regex_unref(multiline_regex);
-    g_free(pattern);    
-    if(!is_dualpage || !term_has_whitespace){
-        g_free(cleaned_term);
-        return find_results;
-    } 
-    GList *multipage_prefix_regex_list = NULL;
-    GList *multipage_postfix_regex_list = NULL;
-    char **tokens = g_regex_split_simple("\\s+",
-                                         cleaned_term,
-                                         0,
-                                         0);
-    int num_tokens = g_strv_length(tokens);
-    for(int i = 0; i < num_tokens - 1; i++){
-        GString *prefix_pattern = g_string_new("");
-        for(int j = 0; j <= i; j++){   
-            prefix_pattern = g_string_append(prefix_pattern,
-                                             *(tokens + j));
-            if(j < i){
-                prefix_pattern = g_string_append(prefix_pattern,
-                                                 "(\\R|\\s)+");
-            }
-        }
-        if(is_whole_words){
-            prefix_pattern = g_string_prepend(prefix_pattern,
-                                              "\\b");
-        }
-        prefix_pattern = g_string_append(prefix_pattern,
-                                         "$");
-        err = NULL;
-        GRegex *prefix_regex = g_regex_new(
-            prefix_pattern->str,
-            G_REGEX_CASELESS | G_REGEX_MULTILINE,
-            0,
-            &err);
-        if(!prefix_regex){
-            g_print("prefix_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                    err->domain, err->code, err->message);
-        }    
-        multipage_prefix_regex_list = g_list_append(multipage_prefix_regex_list,
-                                                    prefix_regex);
-        g_string_free(prefix_pattern,
-                      FALSE);  
-
-        GString *postfix_pattern = g_string_new("^");
-        for(int k = i + 1; k < num_tokens; k++){
-            postfix_pattern = g_string_append(postfix_pattern,
-                                              *(tokens + k));
-            if(k < num_tokens - 1){
-                postfix_pattern = g_string_append(postfix_pattern,
-                                                  "(\\R|\\s)+");
-            }
-        }
-        if(is_whole_words){
-            postfix_pattern = g_string_append(postfix_pattern,
-                                               "\\b");
-        }
-        err = NULL;
-        GRegex *postfix_regex = g_regex_new(
-            postfix_pattern->str,
-            G_REGEX_CASELESS | G_REGEX_MULTILINE,
-            0,
-            &err);
-        if(!postfix_regex){
-            g_print("postfix_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                    err->domain, err->code, err->message);
-        }
-        multipage_postfix_regex_list = g_list_append(multipage_postfix_regex_list,
-                                                     postfix_regex);
-        g_string_free(postfix_pattern,
-                      FALSE);
-    }   
-    if(g_list_length(multipage_prefix_regex_list) != g_list_length(multipage_postfix_regex_list)){
-        g_print("the number of prefix and postfix regexes are not the same.\n");
-    }
-    /* 3: multipage search. a page might end with some terms and the next page begin with the 
-          rest of the terms.
-          if 'adios pegasus camus' is requested, we try to find the first set of terms in the
-          current page and the rest of the terms in the next page.
-    */
-    int multipage_regex_num = g_list_length(multipage_prefix_regex_list);
-    for(int page_num = start_page; page_num < start_page + pages_length - 1; page_num++){
-        PageMeta *meta_prefix = g_ptr_array_index(d.metae,
-                                                  page_num);
-        PageMeta *meta_postfix = g_ptr_array_index(d.metae,
-                                                   page_num + 1);
-        for(int i = 0; i < multipage_regex_num; i++){
-            GRegex *prefix_regex = g_list_nth_data(multipage_prefix_regex_list,
-                                                   i);
-            GList *find_results_prefix = NULL;       
-            find_rects_of_text(meta_prefix,
-                               prefix_regex,
-                               TRUE,
-                               is_whole_words,
-                               &find_results_prefix);            
-            if(find_results_prefix){         
-                FindResult *find_result_prefix = find_results_prefix->data;
-                /* make sure prefix result does not intersect previous find results */
-                GList *already_p = find_results;
-                while(already_p){
-                    FindResult *fr_already = already_p->data;
-                    if((fr_already->page_num == meta_prefix->page_num) &&
-                       rect_lists_intersect(fr_already->physical_layouts,
-                                            find_result_prefix->physical_layouts))
-                    {
-                        break;
-                    }
-                    already_p = already_p->next;
-                }
-                if(already_p){
-                    find_result_free(find_result_prefix);
-                    g_list_free(find_results_prefix);
-                    continue;
-                }            
-
-                GRegex *postfix_regex = g_list_nth_data(multipage_postfix_regex_list,
-                                                        i);
-                GList *find_results_postfix = NULL;
-                find_rects_of_text(meta_postfix,
-                                   postfix_regex,
-                                   TRUE,
-                                   is_whole_words,
-                                   &find_results_postfix);                
-                if(find_results_postfix){
-                    FindResult *find_result_postfix = find_results_postfix->data;
-                    /* make sure postfix result does not intersect previous find results */
-                    GList *already_p = find_results;
-                    while(already_p){
-                        FindResult *fr_already = already_p->data;
-                        if((fr_already->page_num == meta_postfix->page_num) &&
-                           rect_lists_intersect(fr_already->physical_layouts,
-                                                find_result_postfix->physical_layouts))
-                        {
-                            break;
-                        }
-                        already_p = already_p->next;
-                    }
-                    if(already_p){
-                        find_result_free(find_result_prefix);
-                        g_list_free(find_results_prefix);
-                        find_result_free(find_result_postfix);
-                        g_list_free(find_results_postfix);
-                        continue;
-                    }
-                    find_result_prefix->page_postfix = find_result_postfix;
-                    find_result_postfix->page_prefix = find_result_prefix;                    
-                    find_results = g_list_append(find_results,
-                                                 find_result_prefix);
-                    find_results = g_list_append(find_results,
-                                                 find_result_postfix);
-                    g_list_free(find_results_prefix);
-                    g_list_free(find_results_postfix);
-                    /*g_print("multipage find result: %d: '%s', %d: '%s'\n",
-                            page_num, find_result_prefix->match,
-                            page_num + 1, find_result_postfix->match);*/
-                }
-                else{
-                    find_result_free(find_result_prefix);                                       
-                    g_list_free(find_results_prefix);
-                }
-            }
-        }
-    }
-    GList *list_p = multipage_prefix_regex_list;
-    while(list_p){
-        g_regex_unref(list_p->data);
-        list_p = list_p->next;
-    }
-    g_list_free(multipage_prefix_regex_list);
-    list_p = multipage_postfix_regex_list;
-    while(list_p){
-        g_regex_unref(list_p->data);
-        list_p = list_p->next;
-    }
-    g_list_free(multipage_postfix_regex_list);
-    g_free(cleaned_term);        
-    return find_results;
-}
-
 static void
 load_text_layouts(PageMeta *meta)
 {
@@ -1164,61 +407,71 @@ load_text_layouts(PageMeta *meta)
 }
 
 static void
-load_links(PageMeta *meta,
-           int       page_num)
+load_links()
 {
-    meta->links = NULL;
-    GList *link_mappings = poppler_page_get_link_mapping(meta->page);
-    GList *link_p = link_mappings;
-    while(link_p){
-        PopplerLinkMapping *link_mapping = link_p->data;
-        Link *link = g_malloc(sizeof(Link));
-        /* flip and swap y-coordinates */
-        link->physical_layout = rect_new();
-        link->physical_layout->x1 = link_mapping->area.x1;            
-        link->physical_layout->y1 = meta->page_height - link_mapping->area.y2;
-        link->physical_layout->x2 = link_mapping->area.x2;
-        link->physical_layout->y2 = meta->page_height - link_mapping->area.y1;
-        link->is_hovered = FALSE;
-        link->tip = NULL;
-        link->target_page_num = -1;
-        switch(link_mapping->action->type){
-            case POPPLER_ACTION_GOTO_DEST:
-            {
-                PopplerActionGotoDest *goto_dest_action = (PopplerActionGotoDest*)
-                    link_mapping->action;
-                TOCItem target = toc_find_dest(d.doc,
-                                               goto_dest_action->dest);
-                link->target_page_num = target.page_num;
-                link->target_progress_x = target.offset_x;
-                link->target_progress_y = target.offset_y;
-                link->tip = g_strdup_printf("Page '%d'",
-                                            target.page_num);
-                break;
+    for(int page_num = 0; page_num < d.num_pages; page_num++){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        meta->links = NULL;
+        GList *link_mappings = poppler_page_get_link_mapping(meta->page);
+        GList *link_p = link_mappings;
+        while(link_p){
+            PopplerLinkMapping *link_mapping = link_p->data;
+            Link *link = g_malloc(sizeof(Link));
+            link->physical_layout = rect_new();
+            link->physical_layout->x1 = link_mapping->area.x1;            
+            link->physical_layout->y1 = meta->page_height - link_mapping->area.y2;
+            link->physical_layout->x2 = link_mapping->area.x2;
+            link->physical_layout->y2 = meta->page_height - link_mapping->area.y1;
+            link->is_hovered = FALSE;
+            link->tip = NULL;
+            link->target_page_num = -1;
+            switch(link_mapping->action->type){
+                case POPPLER_ACTION_GOTO_DEST:
+                {
+                    PopplerActionGotoDest *goto_dest_action = (PopplerActionGotoDest*)
+                        link_mapping->action;
+                    TOCItem target = toc_find_dest(d.doc,
+                                                   goto_dest_action->dest);
+                    link->target_page_num = target.page_num;
+                    link->target_progress_x = target.offset_x;
+                    link->target_progress_y = target.offset_y;
+                    PageMeta *meta_target = g_ptr_array_index(d.metae,
+                                                              target.page_num);
+                    if(meta_target->page_label->label){
+                        link->tip = g_strdup_printf("Page '%s'",
+                                                    meta_target->page_label->label);
+                    }
+                    else{
+                        link->tip = g_strdup_printf("Page(index): '%d'",
+                                                    target.page_num);
+                    }
+                    break;
+                }
+                case POPPLER_ACTION_GOTO_REMOTE:
+                {
+                    PopplerActionGotoRemote *remote_action = (PopplerActionGotoRemote*)
+                        link_mapping->action;
+                    link->tip = g_markup_printf_escaped("Open '%s'",
+                                                       remote_action->file_name);
+                    break;
+                }
+                case POPPLER_ACTION_URI:
+                {
+                    PopplerActionUri *uri_action = (PopplerActionUri*)
+                        link_mapping->action;
+                    link->tip = g_markup_printf_escaped("URI '%s'",
+                                                       uri_action->uri);
+                    break;
+                }
+                default:;
             }
-            case POPPLER_ACTION_GOTO_REMOTE:
-            {
-                PopplerActionGotoRemote *remote_action = (PopplerActionGotoRemote*)
-                    link_mapping->action;
-                link->tip = g_markup_printf_escaped("Open '%s'",
-                                                   remote_action->file_name);
-                break;
-            }
-            case POPPLER_ACTION_URI:
-            {
-                PopplerActionUri *uri_action = (PopplerActionUri*)
-                    link_mapping->action;
-                link->tip = g_markup_printf_escaped("URI '%s'",
-                                                   uri_action->uri);
-                break;
-            }
-            default:;
+            meta->links = g_list_append(meta->links,
+                                        link);
+            link_p = link_p->next;
         }
-        meta->links = g_list_append(meta->links,
-                                    link);
-        link_p = link_p->next;
+        poppler_page_free_link_mapping(link_mappings);
     }
-    poppler_page_free_link_mapping(link_mappings);
 }
 
 static void
@@ -1232,7 +485,8 @@ load_units(void)
         GList *list_p = meta->converted_units;
         while(list_p){
             ConvertedUnit *cv = list_p->data; 
-            GList *find_results = find_text(cv->whole_match,
+            GList *find_results = find_text(d.metae,
+                                            cv->whole_match,
                                             page_num,
                                             1,
                                             FALSE,
@@ -1307,36 +561,45 @@ load_units(void)
 static void 
 load_toc(void)
 {
-    toc_create(d.doc,
-               &d.toc.head_item,
-               &d.toc.max_depth);
+    /* 1: check if document provides TOC */
+     toc_create_from_poppler_index(d.doc,
+                                   &d.toc.head_item);    
+    /* 2: locate contents/index/toc pages */
+    if(!d.toc.head_item){
+        g_print("Document provides no index, trying to synthesize TOC from the contents' pages.\n");
+        toc_create_from_contents_pages(d.doc,
+                                       d.metae,
+                                       d.page_label_num_hash,
+                                       &d.toc.head_item);
+    }
+    /* 3: scan all pages and create TOC */
+    if(!d.toc.head_item){
+    }
+
     if(d.toc.head_item){
         char *title = poppler_document_get_title(d.doc);
-        if(title){
-            if(strlen(title) == 0){
-                g_free(title);
-                title = g_strdup("Head");
+        d.toc.head_item->title = 
+            (!title || strlen(title) == 0) ? g_strdup("Head")
+                                           : title;
+        toc_flatten(d.toc.head_item,
+                    &d.toc.flattened_items);        
+        GList *list_p = d.toc.flattened_items;
+        while(list_p){
+            TOCItem *toc_item = list_p->data;
+            if(toc_item->label && string_index_in_list(d.toc.labels,
+                                                       toc_item->label,
+                                                       FALSE) < 0)
+            {
+                d.toc.labels = g_list_append(d.toc.labels,
+                                             g_strdup(toc_item->label));
+                d.toc.navigation_button_rects = g_list_append(d.toc.navigation_button_rects,
+                                                              rect_new());
+                d.toc.navigation_button_rects = g_list_append(d.toc.navigation_button_rects,
+                                                              rect_new());
             }
-        }
-        else{
-            title = g_strdup("Head");
-        }
-        d.toc.head_item->title = title;
+            list_p = list_p->next;
+        }           
     }
-    d.toc.flattened_items = NULL;    
-    toc_flatten_items(d.toc.head_item,
-                      &d.toc.flattened_items);
-    d.toc.labels = NULL;
-    toc_get_labels(d.toc.head_item,
-                   &d.toc.labels);
-    d.toc.navigation_button_rects = NULL;
-    for(int i = 0; i < g_list_length(d.toc.labels) * 2; i++){
-        d.toc.navigation_button_rects = g_list_append(d.toc.navigation_button_rects,
-                                                      rect_new());       
-    }    
-    d.toc.origin_x = 0;
-    d.toc.origin_y = 0;
-    d.toc.where = NULL;
 }
 
 static int 
@@ -1769,7 +1032,8 @@ resolve_referenced_figures (int start_page)
                     char *needle = g_strdup_printf("%s %s",
                                                    ref_figure->label,
                                                    ref_figure->id);
-                    ref_figure->find_results = find_text(needle,
+                    ref_figure->find_results = find_text(d.metae,
+                                                         needle,
                                                          page_num,
                                                          1,
                                                          FALSE,
@@ -1802,18 +1066,7 @@ load_metae(void)
         PageMeta *meta = g_malloc(sizeof(PageMeta));
         meta->page_num = page_num;
         meta->page = poppler_document_get_page(d.doc,
-                                               page_num);        
-        meta->page_label = poppler_page_get_label(meta->page);        
-        if(meta->page_label){
-            meta->reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%s</i> of %d</span>",
-                                                          meta->page_label,
-                                                          d.num_pages);
-        }
-        else{
-            meta->reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%d</i> of %d</span>",
-                                                          page_num + 1,
-                                                          d.num_pages);
-        }        
+                                               page_num);               
         poppler_page_get_size(meta->page,
                               &meta->page_width,
                               &meta->page_height);
@@ -1822,9 +1075,7 @@ load_metae(void)
         meta->num_layouts = 0;
         meta->physical_text_layouts = NULL;
         load_text_layouts(meta);
-        meta->links = NULL;
-        load_links(meta,
-                   page_num); 
+        meta->links = NULL;         
         meta->converted_units = NULL;
         meta->figures = NULL;
         meta->referenced_figures = NULL;
@@ -1833,6 +1084,217 @@ load_metae(void)
         g_ptr_array_add(d.metae,
                         meta);
     }
+}
+
+static void
+fix_page_labels(void)
+{
+    /* 
+       Page labels are 'lone' numerals that are the most distant(wrt Y-center)
+       objects to the center of the page. Once they are found, a frequency
+       count is performed and the most frequent diff(between 0-based page_num
+       and label) is chosen as the value that gets subtracted from the
+       page_num of each page to get the actual page label.
+       Initial pages of books are usually labeled with roman numerals. If any 
+       page is found to be labeled this way, it is used as a reference for the
+       labeling of its neighbour pages.
+    */
+    GError *err = NULL;
+    GRegex *page_label_regex = NULL;
+    const char *pattern = 
+        "# roman range: 1-99\n"
+        "^((XC|XL|L?X{0,3})(IX|IV|V?I{0,3})|\\d+)\\b|\n"
+        "\\b((XC|XL|L?X{0,3})(IX|IV|V?I{0,3})|\\d+)$";
+    page_label_regex = g_regex_new(pattern,
+                                   G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_MULTILINE | G_REGEX_NO_AUTO_CAPTURE,
+                                   G_REGEX_MATCH_NOTEMPTY,
+                                   &err);
+    if(!page_label_regex){
+        g_print("page_label_regex error.\ndomain: %d, \ncode: %d, \nmessage: %s\n",
+                err->domain, err->code, err->message);
+        return; 
+    }    
+    GHashTable *diff_freq_hash = g_hash_table_new(g_direct_hash,
+                                                  g_direct_equal);
+    for(int page_num = 0; page_num < d.num_pages; page_num++){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        meta->page_label = g_malloc(sizeof(PageLabel));
+        meta->page_label->label = NULL;
+        meta->page_label->physical_layout = NULL;
+
+        double min_dist = meta->page_height;
+        char *page_label_str = NULL;
+        GMatchInfo *match_info = NULL;
+        g_regex_match(page_label_regex,
+                      meta->text,
+                      0,
+                      &match_info);
+        while(g_match_info_matches(match_info)){
+            char *match = g_match_info_fetch(match_info,
+                                             0);
+            GList *pop_list = poppler_page_find_text_with_options(meta->page,
+                                                                  match,
+                                                                  POPPLER_FIND_WHOLE_WORDS_ONLY);
+            GList *list_p = pop_list;
+            while(list_p){
+                Rect *rect = rect_from_poppler_rectangle(list_p->data);
+                rect->y1 = meta->page_height - rect->y1;
+                rect->y2 = meta->page_height - rect->y2;
+                double center_y = rect_center_y(rect);
+                double dist = MIN(center_y, meta->page_height - center_y);
+                if(dist < min_dist){
+                    page_label_str = match;
+                    min_dist = dist;
+                }
+                else{
+                    rect_free(rect);
+                }
+                list_p = list_p->next;
+            }
+            g_list_free(pop_list);
+            if(page_label_str != match){
+                g_free(match);
+            }
+            g_match_info_next(match_info,
+                              NULL);
+        }
+        g_match_info_free(match_info); 
+        if(!page_label_str){
+            continue;
+        }                
+        meta->page_label->label = page_label_str;
+        char *end_ptr = NULL;
+        int page_label_decimal = g_ascii_strtoll(page_label_str,
+                                                 &end_ptr,
+                                                 10);
+        if((page_label_decimal == 0) && (page_label_str == end_ptr)){
+            continue;
+        }
+        int diff = page_num - page_label_decimal;
+        int freq = 0;        
+        if(g_hash_table_contains(diff_freq_hash,
+                                 GINT_TO_POINTER(diff)))
+        {
+            freq = GPOINTER_TO_INT(g_hash_table_lookup(diff_freq_hash,
+                                                       GINT_TO_POINTER(diff)));
+        }
+        freq += 1;
+        g_hash_table_insert(diff_freq_hash,
+                            GINT_TO_POINTER(diff),
+                            GINT_TO_POINTER(freq));
+    }
+    g_regex_unref(page_label_regex);
+    int max_freq = -1, actual_diff = 0;
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init (&iter, diff_freq_hash);
+    while (g_hash_table_iter_next (&iter, &key, &value)){
+        int diff = GPOINTER_TO_INT(key);
+        int freq = GPOINTER_TO_INT(value);
+        if(freq > max_freq){
+            max_freq = freq;
+            actual_diff = diff;
+        }
+    }
+    g_hash_table_unref(diff_freq_hash);
+    /* at least half of pages should suggest the same diff, otherwise simple
+       index-labeling will be used. */
+    if(max_freq < d.num_pages / 2){
+        for(int page_num = 0; page_num < d.num_pages; page_num++){
+            PageMeta *meta = g_ptr_array_index(d.metae,
+                                               page_num);
+            g_free(meta->page_label->label);
+            meta->page_label->label = g_strdup_printf("%d",
+                                                      page_num + 1);
+        }
+        g_print("Majority of the pages provide no labels, using page index instead.\n");
+        return;
+    }
+    /* find the first roman-labeled page starting from the last possible
+       roman-labeled page (because first pages of books are usually un-labeled) */
+    int frl_page_num = actual_diff;
+    for(; frl_page_num >= 0; frl_page_num--){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           frl_page_num);        
+        if(roman_to_decimal(meta->page_label->label) > -1){
+            break;
+        }
+    }
+    if(frl_page_num >= 0){
+        PageMeta *frl_meta = g_ptr_array_index(d.metae,
+                                               frl_page_num);
+        /* label pages before the first roman-labeled page */
+        int pre_frl_page_num = frl_page_num - 1;
+        const char *pre_frl_label = roman_previous(frl_meta->page_label->label);
+        gboolean is_upper = g_ascii_isupper(frl_meta->page_label->label[0]);
+        while(pre_frl_page_num >= 0 && pre_frl_label){
+            PageMeta *pre_frl_meta = g_ptr_array_index(d.metae,
+                                                       pre_frl_page_num);
+            g_free(pre_frl_meta->page_label->label);
+            pre_frl_meta->page_label->label = is_upper ? g_strdup(pre_frl_label)
+                                                       : g_ascii_strdown(pre_frl_label,
+                                                                         -1);
+            pre_frl_label = roman_previous(pre_frl_label);            
+            pre_frl_page_num--;
+        }
+        /* if no more roman numerals exist, unlabel the remaining pages */
+        for(int page_num = 0; page_num < pre_frl_page_num; page_num++){
+            PageMeta *pre_roman_meta = g_ptr_array_index(d.metae,
+                                                         page_num);
+            g_free(pre_roman_meta->page_label->label);
+            pre_roman_meta->page_label->label = NULL;
+        }
+        /* label pages after the first roman labeled page */
+        int post_frl_page_num = frl_page_num + 1;
+        const char *post_frl_label = roman_next(frl_meta->page_label->label);
+        while(post_frl_page_num <= actual_diff && post_frl_label){
+            PageMeta *post_frl_meta = g_ptr_array_index(d.metae,
+                                                        post_frl_page_num);
+            g_free(post_frl_meta->page_label->label);
+            post_frl_meta->page_label->label = is_upper ? g_strdup(post_frl_label)
+                                                        : g_ascii_strdown(post_frl_label,
+                                                                         -1);
+            post_frl_label = roman_next(post_frl_label);
+            post_frl_page_num++;
+        }
+        /* if no more roman numerals exist, unlabel the remaining pages */
+        for(int page_num = post_frl_page_num; page_num <= actual_diff; page_num++){
+            PageMeta *post_roman_meta = g_ptr_array_index(d.metae,
+                                                          page_num);
+            g_free(post_roman_meta->page_label->label);
+            post_roman_meta->page_label->label = NULL;
+        }
+    }
+    else{
+        /* in case no roman labels are found, unlabel the pages */
+        for(int page_num = 0; page_num <= actual_diff; page_num++){
+            PageMeta *unlabeled_meta = g_ptr_array_index(d.metae,
+                                                         page_num);
+            g_free(unlabeled_meta->page_label->label);
+            unlabeled_meta->page_label->label = NULL;
+        }
+    }
+    /* assign numeric labels to decimally labelled pages */
+    for(int page_num = actual_diff + 1; page_num < d.num_pages; page_num++)
+    {
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        g_free(meta->page_label->label);
+        meta->page_label->label = g_strdup_printf("%d",
+                                                  page_num - actual_diff);
+    }
+    for(int page_num = 0; page_num < d.num_pages; page_num++){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           page_num);
+        if(!meta->page_label->label){
+            continue;
+        }
+        g_hash_table_insert(d.page_label_num_hash,
+                            meta->page_label->label,
+                            GINT_TO_POINTER(page_num));
+    }
+
 }
 
 static void
@@ -1852,8 +1314,9 @@ zero_document(void)
     d.cur_page_num = -1;
     /*d.zoom_level = PageFit;*/
     d.toc.head_item = NULL;
-    d.toc.max_depth = 0;
+    d.toc.labels = NULL;
     d.toc.flattened_items = NULL;
+    d.toc.navigation_button_rects = NULL;
     d.toc.where = NULL;
     d.toc.origin_x = 0;
     d.toc.origin_y = 0;
@@ -1869,15 +1332,13 @@ setup_text_completions(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
-        char *page_label = meta->page_label ? g_strdup(meta->page_label)
-                                            : g_strdup_printf("%d",
-                                                              page_num + 1);
         text_list = g_list_append(text_list,
-                                  page_label);
+                                  g_strdup(meta->page_label->label));
     }
     teleport_widget_update_text_completions(text_list,
                                             "Page");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
     text_list = NULL;
     /* navigation commands */
     text_list = g_list_append(text_list,
@@ -1897,19 +1358,14 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "Navigation");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
     text_list = NULL;
     /* toc items */
     list_p = d.toc.flattened_items;
     while(list_p){
         TOCItem *toc_item = list_p->data;
-        if(toc_item->depth > 1){
-            if(toc_item->id){
-                text_list = g_list_append(text_list,
-                                          g_strdup_printf("%s %s",
-                                                          toc_item->label,
-                                                          toc_item->id));
-            }
+        if(toc_item->depth > 0){            
             text_list = g_list_append(text_list,
                                       g_strdup(toc_item->title));
         }
@@ -1917,7 +1373,8 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "TOC");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
     text_list = NULL;
     /* figures */
     for(int page_num = 0; page_num < d.num_pages; page_num++){
@@ -1941,7 +1398,8 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "Figure");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
 }
 
 static void
@@ -1975,13 +1433,8 @@ destroy_document(void)
         /* find resutlts */
         g_list_free(meta->find_results);
         /* units */
-        list_p = meta->converted_units;
-        while(list_p){
-            ConvertedUnit *cv = list_p->data;
-            converted_unit_free(cv);
-            list_p = list_p->next;
-        }
-        g_list_free(meta->converted_units);
+        g_list_free_full(meta->converted_units,
+                         (GDestroyNotify)converted_unit_free);
         /* figures */
         if(meta->figures){
             GHashTableIter iter;
@@ -2000,39 +1453,29 @@ destroy_document(void)
             ReferencedFigure *ref_figure = list_p->data;
             g_free(ref_figure->id);
             g_free(ref_figure->label);
-            GList *result_p = ref_figure->find_results;
-            while(result_p){
-                find_result_free(result_p->data);
-                result_p = result_p->next;
-            }
-            g_list_free(ref_figure->find_results);
+            g_list_free_full(ref_figure->find_results,
+                             (GDestroyNotify)find_result_free);
             g_free(ref_figure);
             list_p = list_p->next;
         }
         g_list_free(meta->referenced_figures);
-        g_object_unref(meta->page);        
+        g_object_unref(meta->page);     
+        if(meta->page_label){
+            g_free(meta->page_label->label);        
+            rect_free(meta->page_label->physical_layout);
+        }
         g_free(meta->page_label);
-        g_free(meta->reading_progress_text);
         g_free(meta);
     }
     g_ptr_array_unref(d.metae);
     cairo_surface_destroy(d.image);
-    GList *list_p = d.find_details.find_results;
-    while(list_p){
-        find_result_free(list_p->data);
-        list_p = list_p->next;
-    }
+    g_list_free_full(d.find_details.find_results,
+                     (GDestroyNotify)find_result_free);
     toc_destroy(d.toc.head_item);
-    list_p = d.toc.labels;
-    while(list_p){
-        g_free((char*)list_p->data);
-        list_p = list_p->next;
-    }
-    list_p = d.toc.navigation_button_rects;
-    while(list_p){
-        rect_free(list_p->data);
-        list_p = list_p->next;
-    }    
+    g_list_free_full(d.toc.labels,
+                     (GDestroyNotify)g_free);    
+    g_list_free_full(d.toc.navigation_button_rects,
+                     (GDestroyNotify)rect_free);
     g_list_free(d.toc.flattened_items);
     g_list_free(d.find_details.find_results);
     if(d.go_back_stack){
@@ -2042,6 +1485,7 @@ destroy_document(void)
             p = g_queue_pop_head(d.go_back_stack);
         }
     }
+    g_hash_table_remove_all(d.page_label_num_hash);
     g_free(d.filename);    
     g_free(d.doc_info.book_info_label);
     g_free(d.doc_info.book_info_data);
@@ -2126,6 +1570,10 @@ import_pdf(void)
     g_print("Importing '%s':\n",
             d.filename);
     load_metae();
+    g_print("Fixing page labels...\n");
+    fix_page_labels();
+    g_print("Processing links...\n");
+    load_links();
     g_print("Loading TOC...\n");
     load_toc();
     g_print("Converting units...\n");
@@ -2186,6 +1634,26 @@ activate_link (Link *link)
 }
 
 static void
+goto_figure_page(const Figure *figure)
+{
+    PageMeta *meta = g_ptr_array_index(d.metae,
+                                       figure->page_num);
+    double progress_x = figure->image_physical_layout->x1 / meta->page_width;
+    double progress_y = figure->image_physical_layout->y1 / meta->page_height;
+    d.preserved_progress_x = progress_x;
+    d.preserved_progress_y = progress_y;
+    if(figure->page_num != d.cur_page_num){
+        goto_page(figure->page_num,
+                  progress_x, progress_y);
+    }
+    else{
+        scale_page(d.zoom_level, 
+                   TRUE,
+                   progress_x, progress_y);
+    }
+}
+
+static void
 goto_toc_item_page(const TOCItem *toc_item)
 {
     PageMeta *meta = g_ptr_array_index(d.metae,
@@ -2207,29 +1675,9 @@ goto_toc_item_page(const TOCItem *toc_item)
 }
 
 static void
-goto_figure_page(const Figure *figure)
-{
-    PageMeta *meta = g_ptr_array_index(d.metae,
-                                       figure->page_num);
-    double progress_x = figure->image_physical_layout->x1 / meta->page_width;
-    double progress_y = figure->image_physical_layout->y1 / meta->page_height;
-    d.preserved_progress_x = progress_x;
-    d.preserved_progress_y = progress_y;
-    if(figure->page_num != d.cur_page_num){
-        goto_page(figure->page_num,
-                  progress_x, progress_y);
-    }
-    else{
-        scale_page(d.zoom_level, 
-                   TRUE,
-                   progress_x, progress_y);
-    }
-}
-
-static void
 previous_subsection(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2239,27 +1687,20 @@ previous_subsection(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Subsection){
+        if(toc_get_item_type(toc_item->label) == Subsection &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Subsection)
+        {
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *subsection_item = item_p->data;        
-        if(subsection_item->previous){            
-            goto_toc_item_page(subsection_item->previous);
-        }
-        else{
-            g_print("No subsections before.\n");
-        }
+        goto_toc_item_page(subsection_item->previous);
     }
     g_list_free(where);    
 }
@@ -2267,7 +1708,7 @@ previous_subsection(void)
 static void
 next_subsection(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2277,15 +1718,12 @@ next_subsection(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Subsection){
+        if(toc_get_item_type(toc_item->label) == Subsection &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Subsection)
+        {
             break;
         }
         item_p = item_p->next;
@@ -2302,9 +1740,6 @@ next_subsection(void)
         if(next_subsection_item){
             goto_toc_item_page(next_subsection_item);
         }
-        else{
-            g_print("No more subsections ahead.\n");
-        }
     }
     g_list_free(where);
 }
@@ -2312,7 +1747,7 @@ next_subsection(void)
 static void
 previous_section(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2322,27 +1757,19 @@ previous_section(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Section){
+        if(toc_get_item_type(toc_item->label) == Section &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Section){
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *section_item = item_p->data;
-        if(section_item->previous){
-            goto_toc_item_page(section_item->previous);
-        }
-        else{
-            g_print("No sections before.\n");
-        }
+        goto_toc_item_page(section_item->previous);
     }
     g_list_free(where);    
 }
@@ -2350,7 +1777,7 @@ previous_section(void)
 static void
 next_section(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2360,15 +1787,12 @@ next_section(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Section){
+        if(toc_get_item_type(toc_item->label) == Section &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Section)
+        {
             break;
         }
         item_p = item_p->next;
@@ -2385,48 +1809,37 @@ next_section(void)
         if(next_section_item){
             goto_toc_item_page(next_section_item);
         }
-        else{
-            g_print("No more sections ahead.\n");
-        }
-    }
-    
+    }    
     g_list_free(where);
 }
 
 static void
 previous_chapter(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
     toc_where_am_i(d.cur_page_num,
-               d.toc.head_item,
-               &where);
+                   d.toc.head_item,
+                   &where);
     if(!where){
-        return;
-    }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
         return;
     }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Chapter){
+        if(toc_get_item_type(toc_item->label) == Chapter &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Chapter)
+        {
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *chapter_item = item_p->data;
-        if(chapter_item->previous){
-            goto_toc_item_page(chapter_item->previous);
-        }
-        else{
-            g_print("No chapters before.\n");
-        }
+        goto_toc_item_page(chapter_item->previous);
     }
     g_list_free(where);    
 }
@@ -2434,7 +1847,7 @@ previous_chapter(void)
 static void
 next_chapter(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2444,15 +1857,12 @@ next_chapter(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Chapter){
+        if(toc_get_item_type(toc_item->label) == Chapter &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Chapter)
+        {
             break;
         }
         item_p = item_p->next;
@@ -2469,9 +1879,6 @@ next_chapter(void)
         if(next_chapter_item){
             goto_toc_item_page(next_chapter_item);
         }
-        else{
-            g_print("No more chapters ahead.\n");
-        }
     }
     g_list_free(where);
 }
@@ -2479,7 +1886,7 @@ next_chapter(void)
 static void
 previous_part(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2489,27 +1896,19 @@ previous_part(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Part){
+        if(toc_get_item_type(toc_item->label) == Part &&
+           toc_item->previous &&
+           toc_get_item_type(toc_item->previous->label) == Part){
             break;
         }
         item_p = item_p->next;
     }
     if(item_p){
         TOCItem *part_item = item_p->data;
-        if(part_item->previous){
-            goto_toc_item_page(part_item->previous);
-        }
-        else{
-            g_print("No parts before.\n");
-        }
+        goto_toc_item_page(part_item->previous);
     } 
     g_list_free(where);    
 }
@@ -2517,7 +1916,7 @@ previous_part(void)
 static void
 next_part(void)
 {
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         return;
     }
     GList *where = NULL;
@@ -2527,15 +1926,12 @@ next_part(void)
     if(!where){
         return;
     }
-    /* initium and finis have no label */
-    TOCItem *main_contents_item = where->data;    
-    if(!main_contents_item->label){
-        return;
-    }
     GList *item_p = where;
     while(item_p){
         TOCItem *toc_item = item_p->data;
-        if(toc_get_item_type(toc_item->label) == Part){
+        if(toc_get_item_type(toc_item->label) == Part &&
+           toc_item->next && toc_get_item_type(toc_item->next->label) == Part)
+        {
             break;
         }
         item_p = item_p->next;
@@ -2552,9 +1948,6 @@ next_part(void)
         if(next_part_item){
             goto_toc_item_page(next_part_item);
         }
-        else{
-            g_print("No more parts ahead.\n");
-        }
     }
     g_list_free(where);
 }
@@ -2565,50 +1958,30 @@ teleport(const char *term)
     char *object_name = g_strdup(term);
     g_strstrip(object_name);
     /* object is page label */
-    for(int page_num = 0; page_num < d.num_pages; page_num++){
-        PageMeta *meta = g_ptr_array_index(d.metae,
-                                           page_num);
-        if(meta->page_label){
-           char *escaped = g_regex_escape_string(object_name,
-                                                 -1);
-           char *pattern = g_strdup_printf("^%s$",
-                                           escaped);
-           g_free(escaped);
-           if(g_regex_match_simple(pattern,
-                                   meta->page_label,
-                                   0, 0))
-           {
-               go_back_save();
-               goto_page(page_num,
-                         0, 0);
-               g_free(pattern);
-               g_free(object_name);
-               return;
-           }
-            g_free(pattern);
-        }
-    }
-    /* object is page number(index) */
-    if(g_regex_match_simple("^\\d+$",
-                            object_name,
-                            0, 0))
-    {
-        int page_num = g_ascii_strtoll(object_name,
-                                       NULL,
-                                       10);
-        if(page_num){
-            go_back_save();
-            goto_page(page_num,
-                      0, 0);
-        }
+    int page_num = translate_page_label(d.page_label_num_hash,
+                                        object_name);
+    if(page_num >= 0){
+        go_back_save();
+        goto_page(page_num,
+                  0, 0);
         g_free(object_name);
         return;
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
+    GError *err = NULL;
+    GRegex *navigation_regex = g_regex_new(
+        "^(?<command>next|prev(ious)?)\\b\\s*(?<label>page|part|ch(apter)?|(sub)?sec(tion)?)$",
+        G_REGEX_CASELESS | G_REGEX_NO_AUTO_CAPTURE,
+        0,
+        &err);
+    if(!navigation_regex){
+        g_print("navigation regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
+                err->domain, err->code, err->message);
+    }
     GMatchInfo *match_info = NULL;
     g_regex_match(navigation_regex,
                   object_name,
-                  0,
+                  G_REGEX_MATCH_NOTEMPTY,
                   &match_info);
     if(g_match_info_matches(match_info)){
         go_back_save();
@@ -2667,33 +2040,11 @@ teleport(const char *term)
     }
     g_match_info_free(match_info);
     /* object is toc_item, e.g. chapter 1.2 */
-    if(d.toc.max_depth > 0){
-        gboolean found = FALSE;
-        GList *items = toc_extract_items(object_name);
-        if(items){
-            TOCItem *toc_item = items->data;
-            const TOCItem *target_item = toc_search_by_id(d.toc.head_item,
-                                                          toc_item->label, 
-                                                          toc_item->id);
-            if(target_item){
-                goto_toc_item_page(target_item);
-                found = TRUE;
-            }
-            g_free(toc_item->label);
-            g_free(toc_item->id);
-            g_free(toc_item);
-            g_list_free(items);
-        }
-        else{
-            /* object is non-sequencible toc_item: e.g. notes, bibliography, ... */
-            const TOCItem *target_item = toc_search_by_title(d.toc.head_item,
-                                                             object_name);
-            if(target_item){
-                goto_toc_item_page(target_item);
-                found = TRUE;
-            }
-        }
-        if(found){
+    if(d.toc.head_item){
+        const TOCItem *target_item = toc_search_by_title(d.toc.head_item,
+                                                         object_name);
+        if(target_item){
+            goto_toc_item_page(target_item);
             g_free(object_name);
             return;
         }
@@ -2832,7 +2183,8 @@ on_find_request_received(GtkWidget *sender,
     if(d.metae){
         destroy_find_results();
         gtk_widget_queue_draw(ui.vellum);     
-        d.find_details.find_results = find_text(find_request->text,
+        d.find_details.find_results = find_text(d.metae,
+                                                find_request->text,
                                                 0, d.num_pages,
                                                 find_request->is_dualpage_checked,
                                                 find_request->is_whole_words_checked);
@@ -3029,7 +2381,7 @@ draw_start_mode(cairo_t *cr)
         char *text_continue;
         if(meta->page_label){
             text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%s', continue reading</span>",
-                                            meta->page_label);
+                                            meta->page_label->label);
         }
         else{
             text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%d', continue reading</span>",
@@ -3323,42 +2675,48 @@ draw_reading_mode(cairo_t *cr)
     /* reading progress */
     int padding = 10;
     double text_width, text_height;
-    get_text_size(cr,
-                  meta->reading_progress_text,
-                  &text_width, &text_height);
-    Rect reading_progress_rect;
-    reading_progress_rect.x1 = widget_width - text_width - 3 * padding;
-    reading_progress_rect.y1 = widget_height - text_height - 3 * padding;
-    reading_progress_rect.x2 = reading_progress_rect.x1 + text_width + 2 * padding;
-    reading_progress_rect.y2 = reading_progress_rect.y1 + text_height + 2 * padding;
-    cairo_rectangle(cr,
-                    reading_progress_rect.x1,
-                    reading_progress_rect.y1,
-                    rect_width(&reading_progress_rect),
-                    rect_height(&reading_progress_rect));
-    cairo_set_source_rgba(cr,
-                          dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr,
-                         0.1333, 0.1333, 0.1333);
-    double visual_progress_height = 8;    
-    cairo_rectangle(cr,
-                    reading_progress_rect.x1 + 1,
-                    reading_progress_rect.y2 - visual_progress_height,
-                    rect_width(&reading_progress_rect) - 2,
-                    visual_progress_height);
-    cairo_stroke(cr);
-    cairo_rectangle(cr,
-                    reading_progress_rect.x1 + 2,
-                    reading_progress_rect.y2 - visual_progress_height + 1,
-                    ((double)(d.cur_page_num + 1) / d.num_pages) * (rect_width(&reading_progress_rect) - 4),
-                    visual_progress_height - 2);
-    cairo_fill(cr);
-    draw_text(cr,
-              meta->reading_progress_text,
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              &reading_progress_rect);
+    if(meta->page_label->label){
+        char *reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%s</i> of %d</span>",
+                                                      meta->page_label->label,
+                                                      d.num_pages);
+        get_text_size(cr,
+                      reading_progress_text,
+                      &text_width, &text_height);
+        Rect reading_progress_rect;
+        reading_progress_rect.x1 = widget_width - text_width - 3 * padding;
+        reading_progress_rect.y1 = widget_height - text_height - 3 * padding;
+        reading_progress_rect.x2 = reading_progress_rect.x1 + text_width + 2 * padding;
+        reading_progress_rect.y2 = reading_progress_rect.y1 + text_height + 2 * padding;
+        cairo_rectangle(cr,
+                        reading_progress_rect.x1,
+                        reading_progress_rect.y1,
+                        rect_width(&reading_progress_rect),
+                        rect_height(&reading_progress_rect));
+        cairo_set_source_rgba(cr,
+                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr,
+                             0.1333, 0.1333, 0.1333);
+        double visual_progress_height = 8;    
+        cairo_rectangle(cr,
+                        reading_progress_rect.x1 + 1,
+                        reading_progress_rect.y2 - visual_progress_height,
+                        rect_width(&reading_progress_rect) - 2,
+                        visual_progress_height);
+        cairo_stroke(cr);
+        cairo_rectangle(cr,
+                        reading_progress_rect.x1 + 2,
+                        reading_progress_rect.y2 - visual_progress_height + 1,
+                        ((double)(d.cur_page_num + 1) / d.num_pages) * (rect_width(&reading_progress_rect) - 4),
+                        visual_progress_height - 2);
+        cairo_fill(cr);
+        draw_text(cr,
+                  reading_progress_text,
+                  PANGO_ALIGN_CENTER,
+                  PANGO_ALIGN_CENTER,
+                  &reading_progress_rect);
+        g_free(reading_progress_text);
+    }
     /* zoom widget */
     /* page fit */
     cairo_rectangle(cr,
@@ -3730,7 +3088,7 @@ draw_toc_mode(cairo_t *cr)
 {
     int widget_width = gtk_widget_get_allocated_width(ui.vellum);
     int widget_height = gtk_widget_get_allocated_height(ui.vellum);
-    if(d.toc.max_depth == 0){
+    if(!d.toc.head_item){
         Rect wr;
         wr.x1 = wr.y1 = 0;
         wr.x2 = widget_width;
@@ -4131,13 +3489,6 @@ key_press_callback(GtkWidget   *widget,
             if(ui.app_mode == ReadingMode){
                 zoom_width_fit();
             }
-            // else if(ui.app_mode == TOCMode){
-            //     if(d.toc.max_depth > 0){
-            //         TOCItem *toc_item = g_list_last(d.toc.where)->data;
-            //         d.toc.origin_y = toc_item->rect->y1;
-            //         gtk_widget_queue_draw(ui.vellum);
-            //     }
-            // }
             break;
         case GDK_KEY_f:
         case GDK_KEY_F:
@@ -4366,7 +3717,7 @@ button_press_callback (GtkWidget      *widget,
         }
     }
     else if(ui.app_mode == TOCMode){
-        if(d.toc.max_depth == 0){
+        if(!d.toc.head_item){
             switch_app_mode(ReadingMode);            
         }
         else{
@@ -4628,7 +3979,7 @@ tooltip_event_callback(GtkWidget  *widget,
             list_p = list_p->next;
         }
         if(tooltip_cv){
-            unit_tip = g_strdup_printf("<span font='sans 10' foreground='#c3c3c3'>Unit</span>: %s",
+            unit_tip = g_strdup_printf("<span font='sans 10' >Unit</span>: %s",
                                        tooltip_cv->value_str);
         }
         /* find results */
@@ -4659,7 +4010,7 @@ tooltip_event_callback(GtkWidget  *widget,
         }
         if(list_p){
             FindResult *fr = list_p->data;
-            find_tip = g_strdup_printf("<span font='sans 10' foreground='#c3c3c3'>Find</span>: %s",
+            find_tip = g_strdup_printf("<span font='sans 10' >Find</span>: %s",
                                        fr->tip);
         }
         /* links */
@@ -4677,7 +4028,7 @@ tooltip_event_callback(GtkWidget  *widget,
             if(rect_contains_point(&img_rect,
                                    x, y))
             {
-                link_tip = g_strdup_printf("<span font='sans 10' foreground='#c3c3c3'>Link</span>: %s",
+                link_tip = g_strdup_printf("<span font='sans 10' >Link</span>: %s",
                                            link->tip);
                 break;
             }
@@ -4701,25 +4052,25 @@ tooltip_event_callback(GtkWidget  *widget,
         }
         /* tips for page widgets */
         if(ui.is_zoom_widget_PF_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Fits page inside window(F)</span>";
+            tip_markup = "<span font='sans 10' >Fits page inside window(F)</span>";
         }
         else if(ui.is_zoom_widget_WF_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Stretches the page to fit width(W)</span>";
+            tip_markup = "<span font='sans 10' >Stretches the page to fit width(W)</span>";
         }
         else if(ui.is_zoom_widget_IN_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Brings book closer(+)</span>";
+            tip_markup = "<span font='sans 10' >Brings book closer(+)</span>";
         }
         else if(ui.is_zoom_widget_OUT_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Pushes book farther(-)</span>";
+            tip_markup = "<span font='sans 10' >Pushes book farther(-)</span>";
         }
         else if(ui.is_teleport_launcher_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Lets you jump to various book locations(T)</span>";
+            tip_markup = "<span font='sans 10' >Lets you jump to various book locations(T)</span>";
         }
         else if(ui.is_find_text_launcher_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Let's you search for textual data(CTRL + F)</span>";
+            tip_markup = "<span font='sans 10' >Let's you search for textual data(CTRL + F)</span>";
         }
         else if(ui.is_toc_launcher_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Shows table of contents(CTRL + T)</span>";
+            tip_markup = "<span font='sans 10' >Shows table of contents(CTRL + T)</span>";
         }
         if(tip_markup){
             gtk_tooltip_set_markup(GTK_TOOLTIP(tooltip),
@@ -4730,10 +4081,10 @@ tooltip_event_callback(GtkWidget  *widget,
     else if(ui.app_mode == StartMode){
         char *tip_markup = NULL;
         if(ui.is_import_area_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Let's you choose a book(I)</span>";            
+            tip_markup = "<span font='sans 10' >Let's you choose a book(I)</span>";            
         }
         if(ui.is_continue_to_book_button_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Hit to continue reading book(R or Escape)</span>";
+            tip_markup = "<span font='sans 10' >Hit to continue reading book(R or Escape)</span>";
         }
         if(tip_markup){
             gtk_tooltip_set_markup(GTK_TOOLTIP(tooltip),
@@ -4769,10 +4120,10 @@ destroy_app()
     g_object_unref(ui.text_cursor); 
     g_object_unref(ui.pointer_cursor); 
     
+    g_hash_table_unref(d.page_label_num_hash);
     if(d.go_back_stack){
         g_queue_free(d.go_back_stack);
     }
-    g_regex_unref(navigation_regex);
     toc_module_destroy();
     unit_convertor_module_destroy();
     figure_module_destroy();
@@ -4878,6 +4229,8 @@ init_app(GtkApplication *app)
     ui.find_text_launcher_rect = rect_new();
     ui.toc_launcher_rect = rect_new();
 
+    d.page_label_num_hash = g_hash_table_new(g_str_hash,
+                                             g_str_equal);
     d.go_back_stack = g_queue_new();
 
     gtk_container_add(GTK_CONTAINER(ui.main_window), ui.vellum);    
@@ -4896,15 +4249,5 @@ init_app(GtkApplication *app)
                      G_CALLBACK(on_teleport_request_received), NULL);
     ui.find_widget = find_widget_init(ui.main_window);
     g_signal_connect(G_OBJECT(ui.find_widget), "find_request_event",
-                     G_CALLBACK(on_find_request_received), NULL);
-    GError *err = NULL;
-    navigation_regex = g_regex_new(
-        "^(?<command>next|prev(ious)?)\\s*(?<label>page|part|ch(apter)?|(sub)?sec(tion)?)$",
-        G_REGEX_CASELESS | G_REGEX_NO_AUTO_CAPTURE,
-        0,
-        &err);
-    if(!navigation_regex){
-        g_print("navigation regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);
-    }
+                     G_CALLBACK(on_find_request_received), NULL);    
 }
