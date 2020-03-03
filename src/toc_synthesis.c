@@ -154,7 +154,6 @@ align_unprocessed_lines(GPtrArray *page_meta_list,
                     }
                     rect_p = rect_p->next;
                 }
-                g_print("TOC detected(p%d): '%s'\n", meta->page_num, toc_line->str);
                 *aligned_line_list = g_list_append(*aligned_line_list,
                                                    toc_line->str);
                 g_string_free(toc_line,
@@ -251,7 +250,6 @@ decompose_lines(GList *line_list,
                 *unprocessed_line_list = g_list_append(*unprocessed_line_list,
                                                        g_strdup(line));
             }
-            g_print("###: %s\n", line);
         }
         g_match_info_free(match_info);
         list_p = list_p->next;
@@ -338,8 +336,6 @@ treeize_toc_list(GHashTable *page_label_num_hash,
     char *inferred_label = NULL;
     if(my_label_index < 0){
         if(!toc_line->id){
-            /* start of Finis or a caption-only non-Finis toc line: move on */
-            g_print("ignored: %s\n", toc_line->match);
             treeize_toc_list(page_label_num_hash,
                              label_list,
                              parent,
@@ -383,7 +379,7 @@ find_toc_target_position(GPtrArray *page_meta_list,
                          TOCItem *toc_item)
 {
     /*
-      find position of a toc item's heading in its page.
+      find position of a toc item's heading in its page.      
     */
     if(!toc_item){
         return;
@@ -523,9 +519,6 @@ toc_create_from_contents_pages(PopplerDocument *doc,
     for(int page_num = 0; page_num < NUM_CONTENTS_PAGES; page_num++){
         PageMeta *meta = g_ptr_array_index(page_meta_list,
                                            page_num);
-        if(page_num >= 4 && page_num <= 8){
-            g_print("page %d:\n%s\n", page_num, meta->text);
-        }
         char **lines = g_regex_split_simple("\\R",
                                             meta->text,
                                             0, 0);
@@ -575,7 +568,6 @@ toc_create_from_contents_pages(PopplerDocument *doc,
                                                          contents_page_group); 
             }
             most_recent_contents_page = meta->page_num;
-            g_print("TOC contents observed at page %s\n", meta->page_label->label);
         }
         else{
             g_strfreev(lines);
@@ -789,6 +781,8 @@ toc_create_from_contents_pages(PopplerDocument *doc,
                                                    child_item);
             list_p = list_p->next;
         }
+        toc_fix_labels(*head_item,
+                       NULL);
     }
     list_p = final_toc_line_list;
     while(list_p){
@@ -809,5 +803,4 @@ toc_create_from_contents_pages(PopplerDocument *doc,
     toc_calc_length(*head_item);
     find_toc_target_position(page_meta_list,
                              *head_item);
-    toc_dump(*head_item);
 }

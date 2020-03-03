@@ -77,6 +77,9 @@ toc_fix_depth(TOCItem *toc_item);
 void
 toc_fix_sibling_links(TOCItem *toc_item);
 
+void toc_fix_labels(TOCItem *toc_item,
+                    const char *label_parent);
+
 enum TOCType
 toc_get_item_type(const char *label);
 

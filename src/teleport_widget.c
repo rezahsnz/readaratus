@@ -228,7 +228,6 @@ teleport_widget_update_text_completions(GList *text_list,
                            0, text,
                            1, tag,
                            -1);
-        g_free(text);
         text_p = text_p->next;
     }
 }

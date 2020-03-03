@@ -57,7 +57,6 @@ static const double blue_r = 0,
 static const double dashed_style[2] = {8, 5};
 static const int num_dashes = 2;
 static const double toc_navigation_panel_height = 72;
-static GRegex *navigation_regex = NULL;
 
 static void 
 pose_page_widgets(void)
@@ -563,8 +562,8 @@ static void
 load_toc(void)
 {
     /* 1: check if document provides TOC */
-    // toc_create_from_poppler_index(d.doc,
-    //                               &d.toc.head_item);    
+     toc_create_from_poppler_index(d.doc,
+                                   &d.toc.head_item);    
     /* 2: locate contents/index/toc pages */
     if(!d.toc.head_item){
         g_print("Document provides no index, trying to synthesize TOC from the contents' pages.\n");
@@ -575,8 +574,6 @@ load_toc(void)
     }
     /* 3: scan all pages and create TOC */
     if(!d.toc.head_item){
-        g_print("No pages were found with TOC contents, trying to infer TOC by scanning the whole pages of the document.\n");
-
     }
 
     if(d.toc.head_item){
@@ -1340,7 +1337,8 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "Page");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
     text_list = NULL;
     /* navigation commands */
     text_list = g_list_append(text_list,
@@ -1360,13 +1358,14 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "Navigation");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
     text_list = NULL;
     /* toc items */
     list_p = d.toc.flattened_items;
     while(list_p){
         TOCItem *toc_item = list_p->data;
-        if(toc_item->depth > 1){            
+        if(toc_item->depth > 0){            
             text_list = g_list_append(text_list,
                                       g_strdup(toc_item->title));
         }
@@ -1374,7 +1373,8 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "TOC");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
     text_list = NULL;
     /* figures */
     for(int page_num = 0; page_num < d.num_pages; page_num++){
@@ -1398,7 +1398,8 @@ setup_text_completions(void)
     }
     teleport_widget_update_text_completions(text_list,
                                             "Figure");
-    g_list_free(text_list);
+    g_list_free_full(text_list,
+                     (GDestroyNotify)g_free);
 }
 
 static void
@@ -1967,10 +1968,20 @@ teleport(const char *term)
         return;
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
+    GError *err = NULL;
+    GRegex *navigation_regex = g_regex_new(
+        "^(?<command>next|prev(ious)?)\\b\\s*(?<label>page|part|ch(apter)?|(sub)?sec(tion)?)$",
+        G_REGEX_CASELESS | G_REGEX_NO_AUTO_CAPTURE,
+        0,
+        &err);
+    if(!navigation_regex){
+        g_print("navigation regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
+                err->domain, err->code, err->message);
+    }
     GMatchInfo *match_info = NULL;
     g_regex_match(navigation_regex,
                   object_name,
-                  0,
+                  G_REGEX_MATCH_NOTEMPTY,
                   &match_info);
     if(g_match_info_matches(match_info)){
         go_back_save();
@@ -3968,7 +3979,7 @@ tooltip_event_callback(GtkWidget  *widget,
             list_p = list_p->next;
         }
         if(tooltip_cv){
-            unit_tip = g_strdup_printf("<span font='sans 10' foreground='#c3c3c3'>Unit</span>: %s",
+            unit_tip = g_strdup_printf("<span font='sans 10' >Unit</span>: %s",
                                        tooltip_cv->value_str);
         }
         /* find results */
@@ -3999,7 +4010,7 @@ tooltip_event_callback(GtkWidget  *widget,
         }
         if(list_p){
             FindResult *fr = list_p->data;
-            find_tip = g_strdup_printf("<span font='sans 10' foreground='#c3c3c3'>Find</span>: %s",
+            find_tip = g_strdup_printf("<span font='sans 10' >Find</span>: %s",
                                        fr->tip);
         }
         /* links */
@@ -4017,7 +4028,7 @@ tooltip_event_callback(GtkWidget  *widget,
             if(rect_contains_point(&img_rect,
                                    x, y))
             {
-                link_tip = g_strdup_printf("<span font='sans 10' foreground='#c3c3c3'>Link</span>: %s",
+                link_tip = g_strdup_printf("<span font='sans 10' >Link</span>: %s",
                                            link->tip);
                 break;
             }
@@ -4041,25 +4052,25 @@ tooltip_event_callback(GtkWidget  *widget,
         }
         /* tips for page widgets */
         if(ui.is_zoom_widget_PF_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Fits page inside window(F)</span>";
+            tip_markup = "<span font='sans 10' >Fits page inside window(F)</span>";
         }
         else if(ui.is_zoom_widget_WF_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Stretches the page to fit width(W)</span>";
+            tip_markup = "<span font='sans 10' >Stretches the page to fit width(W)</span>";
         }
         else if(ui.is_zoom_widget_IN_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Brings book closer(+)</span>";
+            tip_markup = "<span font='sans 10' >Brings book closer(+)</span>";
         }
         else if(ui.is_zoom_widget_OUT_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Pushes book farther(-)</span>";
+            tip_markup = "<span font='sans 10' >Pushes book farther(-)</span>";
         }
         else if(ui.is_teleport_launcher_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Lets you jump to various book locations(T)</span>";
+            tip_markup = "<span font='sans 10' >Lets you jump to various book locations(T)</span>";
         }
         else if(ui.is_find_text_launcher_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Let's you search for textual data(CTRL + F)</span>";
+            tip_markup = "<span font='sans 10' >Let's you search for textual data(CTRL + F)</span>";
         }
         else if(ui.is_toc_launcher_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Shows table of contents(CTRL + T)</span>";
+            tip_markup = "<span font='sans 10' >Shows table of contents(CTRL + T)</span>";
         }
         if(tip_markup){
             gtk_tooltip_set_markup(GTK_TOOLTIP(tooltip),
@@ -4070,10 +4081,10 @@ tooltip_event_callback(GtkWidget  *widget,
     else if(ui.app_mode == StartMode){
         char *tip_markup = NULL;
         if(ui.is_import_area_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Let's you choose a book(I)</span>";            
+            tip_markup = "<span font='sans 10' >Let's you choose a book(I)</span>";            
         }
         if(ui.is_continue_to_book_button_hovered){
-            tip_markup = "<span font='sans 10' foreground='#c3c3c3'>Hit to continue reading book(R or Escape)</span>";
+            tip_markup = "<span font='sans 10' >Hit to continue reading book(R or Escape)</span>";
         }
         if(tip_markup){
             gtk_tooltip_set_markup(GTK_TOOLTIP(tooltip),
@@ -4113,7 +4124,6 @@ destroy_app()
     if(d.go_back_stack){
         g_queue_free(d.go_back_stack);
     }
-    g_regex_unref(navigation_regex);
     toc_module_destroy();
     unit_convertor_module_destroy();
     figure_module_destroy();
@@ -4239,15 +4249,5 @@ init_app(GtkApplication *app)
                      G_CALLBACK(on_teleport_request_received), NULL);
     ui.find_widget = find_widget_init(ui.main_window);
     g_signal_connect(G_OBJECT(ui.find_widget), "find_request_event",
-                     G_CALLBACK(on_find_request_received), NULL);
-    GError *err = NULL;
-    navigation_regex = g_regex_new(
-        "^(?<command>next|prev(ious)?)\\s*(?<label>page|part|ch(apter)?|(sub)?sec(tion)?)$",
-        G_REGEX_CASELESS | G_REGEX_NO_AUTO_CAPTURE,
-        0,
-        &err);
-    if(!navigation_regex){
-        g_print("navigation regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
-                err->domain, err->code, err->message);
-    }
+                     G_CALLBACK(on_find_request_received), NULL);    
 }

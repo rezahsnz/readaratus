@@ -156,31 +156,31 @@ enum TOCType
 toc_get_item_type (const char *label)
 {
     if(!label){
-        return Chapter;
+        return None;
     }
     enum TOCType toc_type;
-    if(g_regex_match_simple("^part",
+    if(g_regex_match_simple("^part\\b",
                             label,
                             G_REGEX_CASELESS,
                             0))
     {
         toc_type = Part;
     }
-    else if(g_regex_match_simple("^ch(apter)?",
+    else if(g_regex_match_simple("^ch(apter)?\\b",
                                  label,
                                  G_REGEX_CASELESS,
                                  0))
     {
         toc_type = Chapter;
     }
-    else if(g_regex_match_simple("^sec(tion)?",
+    else if(g_regex_match_simple("^sec(tion)?\\b",
                                  label,
                                  G_REGEX_CASELESS,
                                  0))
     {
         toc_type = Section;
     }
-    else if(g_regex_match_simple("^subsec(tion)?",
+    else if(g_regex_match_simple("^subsec(tion)?\\b",
                                  label,
                                  G_REGEX_CASELESS,
                                  0))
@@ -220,6 +220,42 @@ toc_fix_sibling_links(TOCItem *toc_item)
         previous_toc_item = child_item;
         toc_fix_sibling_links(child_item);
         item_p = item_p->next;
+    }
+}
+
+void 
+toc_fix_labels(TOCItem    *toc_item,
+               const char *label_parent)
+{
+    if(!toc_item){
+        return;
+    }
+    GMatchInfo *match_info = NULL;
+    g_regex_match(toc_regex,
+                  toc_item->title ? toc_item->title : "",
+                  0,
+                  &match_info);
+    if(g_match_info_matches(match_info)){
+        toc_item->id = g_match_info_fetch_named(match_info,
+                                                "id");
+        char *label = g_match_info_fetch_named(match_info,
+                                               "label");
+        if(strlen(label) > 0){
+            toc_item->label = label;
+        }
+        else{
+            if(toc_item->id){
+                toc_item->label = g_strdup(toc_infer_child_label(label_parent));
+            }
+        }
+    }
+    g_match_info_free(match_info);
+    GList *list_p = toc_item->children;
+    while(list_p){
+        TOCItem *toc_item_child = list_p->data;
+        toc_fix_labels(toc_item_child,
+                       toc_item->label);
+        list_p = list_p->next;
     }
 }
 
@@ -358,42 +394,6 @@ toc_infer_child_label(const char *label_parent)
     else{
         g_print("Couldn't infer child label from: %s\n", label_parent);
         return NULL;
-    }
-}
-
-void 
-toc_fix_labels(TOCItem    *toc_item,
-               const char *label_parent)
-{
-    if(!toc_item){
-        return;
-    }
-    GMatchInfo *match_info = NULL;
-    g_regex_match(toc_regex,
-                  toc_item->title ? toc_item->title : "",
-                  0,
-                  &match_info);
-    if(g_match_info_matches(match_info)){
-        toc_item->id = g_match_info_fetch_named(match_info,
-                                                "id");
-        char *label = g_match_info_fetch_named(match_info,
-                                               "label");
-        if(strlen(label) > 0){
-            toc_item->label = label;
-        }
-        else{
-            if(toc_item->id){
-                toc_item->label = g_strdup(toc_infer_child_label(label_parent));
-            }
-        }
-    }
-    g_match_info_free(match_info);
-    GList *list_p = toc_item->children;
-    while(list_p){
-        TOCItem *toc_item_child = list_p->data;
-        toc_fix_labels(toc_item_child,
-                       toc_item->label);
-        list_p = list_p->next;
     }
 }
 
