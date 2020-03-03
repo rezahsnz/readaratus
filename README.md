@@ -7,9 +7,10 @@ A dynamic book reading system for computers.
 - Teleportation
 - Enhanced TOC
 - Dual page search
+- TOC synthesis for books that lack one
+- Real page numbers
 ## Features being developed
 - Table to chart
-- TOC synthesis for books that lack one
 - Live code snippets 
 - Keyboard-averse gesture commanding
 
