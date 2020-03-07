@@ -39,7 +39,7 @@ toc_module_init(void)
         "(one|two|three|four|five|six|seven|eight|nine)?|\n"
         "# roman numerals up to 99\n"
         "(I{1,3}|I?V|VI{1,3}|IX)|(XL|XC|L?X{1,3})(I{1,3}|I?V|VI{1,3}|IX)?\n"
-        ")\\b";
+        ")(?=(\\W*\\s|$))";
     GError *err = NULL;
     toc_regex = g_regex_new(pattern,
                             G_REGEX_CASELESS | G_REGEX_EXTENDED | G_REGEX_NO_AUTO_CAPTURE,
@@ -193,6 +193,78 @@ toc_get_item_type (const char *label)
     return toc_type;
 }
 
+
+int
+string_index_in_list(GList      *list,
+                     const char *needle,
+                     gboolean    is_case_sensitive)
+{
+    if(!needle || !list){
+        return -1;
+    }
+    char *escaped_needle = g_regex_escape_string(needle,
+                                                 -1);
+    char *pattern_needle = g_strdup_printf("^%s$",
+                                           escaped_needle); 
+    g_free(escaped_needle);
+    GList *list_p = list;
+    while(list_p){
+        if(g_regex_match_simple(pattern_needle,
+                                list_p->data,
+                                is_case_sensitive ? 0 : G_REGEX_CASELESS,
+                                0))
+        {
+            break;
+        }
+
+        list_p = list_p->next;
+    }
+    g_free(pattern_needle);
+    int index = list_p ? g_list_position(list,
+                                         list_p) 
+                       : -1;
+    return index;
+}
+
+char *
+toc_infer_child_label(const char *label_parent)
+{
+    if(!label_parent){
+        return NULL;
+    }
+    if(g_regex_match_simple("^part$",
+                            label_parent,
+                            G_REGEX_CASELESS,
+                            0))
+    {
+        return "Chapter";
+    }
+    else if(g_regex_match_simple("^ch(apter)?$",
+                                 label_parent,
+                                 G_REGEX_CASELESS,
+                                 0))
+    {
+        return "Section";
+    }
+    else if(g_regex_match_simple("^sec(tion)?$",
+                                 label_parent,
+                                 G_REGEX_CASELESS,
+                                 0))
+    {
+        return "Subsection";
+    }
+    else if(g_regex_match_simple("^subsec(tion)?$",
+                                 label_parent,
+                                 G_REGEX_CASELESS,
+                                 0))
+    {
+        return "Chapter";
+    }
+    else{
+        return NULL;
+    }
+}
+
 void
 toc_fix_depth(TOCItem *toc_item)
 {
@@ -225,36 +297,45 @@ toc_fix_sibling_links(TOCItem *toc_item)
 
 void 
 toc_fix_labels(TOCItem    *toc_item,
-               const char *label_parent)
+               const char *label_parent,
+               gboolean   *has_labels)
 {
     if(!toc_item){
         return;
     }
-    GMatchInfo *match_info = NULL;
-    g_regex_match(toc_regex,
-                  toc_item->title ? toc_item->title : "",
-                  0,
-                  &match_info);
-    if(g_match_info_matches(match_info)){
-        toc_item->id = g_match_info_fetch_named(match_info,
-                                                "id");
-        char *label = g_match_info_fetch_named(match_info,
-                                               "label");
-        if(strlen(label) > 0){
-            toc_item->label = label;
-        }
-        else{
-            if(toc_item->id){
-                toc_item->label = g_strdup(toc_infer_child_label(label_parent));
+    if(toc_item->title){
+        GMatchInfo *match_info = NULL;
+        g_regex_match(toc_regex,
+                      toc_item->title,
+                      0,
+                      &match_info);
+        if(g_match_info_matches(match_info)){
+            toc_item->id = g_match_info_fetch_named(match_info,
+                                                    "id");
+            char *label = g_match_info_fetch_named(match_info,
+                                                   "label");
+            if(strlen(label) > 0){
+                toc_item->label = label;
+            }
+            else{
+                char *inferred_label = g_strdup(toc_infer_child_label(label_parent));
+                toc_item->label = inferred_label ? inferred_label : g_strdup("Chapter");
+            }
+            if(has_labels){
+                *has_labels = TRUE;
             }
         }
+        else{
+            toc_item->label = g_strdup(toc_infer_child_label(label_parent));
+        }
+        g_match_info_free(match_info);
     }
-    g_match_info_free(match_info);
     GList *list_p = toc_item->children;
     while(list_p){
         TOCItem *toc_item_child = list_p->data;
         toc_fix_labels(toc_item_child,
-                       toc_item->label);
+                       toc_item->label,
+                       has_labels);
         list_p = list_p->next;
     }
 }
@@ -332,68 +413,33 @@ walk_poppler_index(PopplerDocument  *doc,
     }while(poppler_index_iter_next(iter));
 }
 
-int
-string_index_in_list(GList      *list,
-                     const char *needle,
-                     gboolean    is_case_sensitive)
+void
+toc_fix_label_blindly(TOCItem    *toc_item,
+                      const char *label_parent)
 {
-    if(!needle || !list){
-        return -1;
+    /* 
+      for tocs that do not provide labels or ids, we will blindly generate
+      labels:
+       - depth 1: chapter
+       - depth 2: section
+       - depth 3: subsection
+               .
+               .
+               .
+    */
+    if(!toc_item){
+        return;
     }
-    char *escaped_needle = g_regex_escape_string(needle,
-                                                 -1);
-    char *pattern_needle = g_strdup_printf("^%s$",
-                                           escaped_needle); 
-    g_free(escaped_needle);
-    GList *list_p = list;
+    if(toc_item->title){
+        /* d1 chapters are more probable */
+        toc_item->label = label_parent ? g_strdup(toc_infer_child_label(label_parent))
+                                       : g_strdup("Part"); 
+    }
+    GList *list_p = toc_item->children;
     while(list_p){
-        if(g_regex_match_simple(pattern_needle,
-                                list_p->data,
-                                is_case_sensitive ? 0 : G_REGEX_CASELESS,
-                                0))
-        {
-            break;
-        }
-
+        toc_fix_label_blindly(list_p->data,
+                          toc_item->label);
         list_p = list_p->next;
-    }
-    g_free(pattern_needle);
-    int index = list_p ? g_list_position(list,
-                                         list_p) 
-                       : -1;
-    return index;
-}
-
-char *
-toc_infer_child_label(const char *label_parent)
-{
-    if(!label_parent){
-        return "Chapter";
-    }
-    if(g_regex_match_simple("^part$",
-                            label_parent,
-                            G_REGEX_CASELESS,
-                            0))
-    {
-        return "Chapter";
-    }
-    else if(g_regex_match_simple("^ch(apter)?$",
-                                 label_parent,
-                                 G_REGEX_CASELESS,
-                                 0))
-    {
-        return "Section";
-    }
-    else if(g_regex_match_simple("^sec(tion)?$",
-                                 label_parent,
-                                 G_REGEX_CASELESS,
-                                 0))
-    {
-        return "Subsection";
-    }
-    else{
-        g_print("Couldn't infer child label from: %s\n", label_parent);
-        return NULL;
     }
 }
 
@@ -411,8 +457,15 @@ toc_create_from_poppler_index(PopplerDocument *doc,
                        iter,
                        *head_item);
     poppler_index_iter_free(iter);
+    gboolean has_labels = FALSE;
     toc_fix_labels(*head_item,
-                   NULL);
+                   NULL,
+                   &has_labels);
+    if(!has_labels){
+        toc_fix_label_blindly(*head_item,
+                              NULL);
+        g_print("TOC is blindly labeled, bear with it.\n");
+    }
     (*head_item)->depth = 0;    
     toc_fix_depth(*head_item);
     toc_fix_sibling_links(*head_item);

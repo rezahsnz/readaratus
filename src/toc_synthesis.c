@@ -798,6 +798,7 @@ toc_create_from_contents_pages(PopplerDocument *doc,
             list_p = list_p->next;
         }
         toc_fix_labels(*head_item,
+                       NULL,
                        NULL);
     }
     list_p = final_toc_line_list;

@@ -71,14 +71,23 @@ TOCItem
 toc_find_dest(PopplerDocument *doc,
 	       	    PopplerDest     *dest);
 
+char *
+toc_infer_child_label(const char *label_parent);
+
+int
+string_index_in_list(GList      *list,
+                     const char *needle,
+                     gboolean    is_case_sensitive);
+
 void
 toc_fix_depth(TOCItem *toc_item);
 
 void
 toc_fix_sibling_links(TOCItem *toc_item);
 
-void toc_fix_labels(TOCItem *toc_item,
-                    const char *label_parent);
+void toc_fix_labels(TOCItem    *toc_item,
+                    const char *label_parent,
+                    gboolean   *has_labels);
 
 enum TOCType
 toc_get_item_type(const char *label);
@@ -92,13 +101,9 @@ const TOCItem *
 toc_search_by_title(const TOCItem *toc_item,
                     const char    *title);
 
-char *
-toc_infer_child_label(const char *label_parent);
-
-int
-string_index_in_list(GList      *list,
-                     const char *needle,
-                     gboolean    is_case_sensitive);
+void
+toc_label_blindly(TOCItem    *toc_item,
+                  const char *label_parent);
 
 void
 toc_create_from_poppler_index(PopplerDocument *doc,

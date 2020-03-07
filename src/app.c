@@ -283,7 +283,7 @@ static void
 previous_page(void)
 {
     goto_page(d.cur_page_num - 1,
-              0, 0);
+              0, 0.999);
 }
 
 static void
@@ -333,43 +333,53 @@ scroll_with_pixels(double dx,
         double image_height = cairo_image_surface_get_height(d.image);
         double hidden_portion_width = image_width - widget_width;
         double hidden_portion_height = image_height - widget_height;
+        double my_dx = dx,
+               my_dy = dy; 
         switch(d.zoom_level){
             case PageFit:
-                dx = dy = 0;
+                my_dx = my_dy = 0;
                 break;
             case WidthFit:
                 /* vertical only */
-                dx = 0;
-                if(dy + d.image_origin_y > 0){
-                    dy = 0;
+                my_dx = 0;
+                if(my_dy + d.image_origin_y > 0){
+                    my_dy = 0;
                 }
-                if(abs(dy + d.image_origin_y) > hidden_portion_height){
-                    dy = 0;
+                if(abs(my_dy + d.image_origin_y) > hidden_portion_height){
+                    my_dy = 0;
                 }
                 break;
             default:
                 /* vertical */
-                if(dy + d.image_origin_y > 0){
-                    dy = 0;
+                if(my_dy + d.image_origin_y > 0){
+                    my_dy = 0;
                 }
-                if(abs(dy + d.image_origin_y) > hidden_portion_height){
-                    dy = 0;
+                if(abs(my_dy + d.image_origin_y) > hidden_portion_height){
+                    my_dy = 0;
                 }
                 /* horizontal */
-                if(dx + d.image_origin_x > 0){
-                    dx = 0;
+                if(my_dx + d.image_origin_x > 0){
+                    my_dx = 0;
                 }
-                if(abs(dx + d.image_origin_x) > hidden_portion_width){
-                    dx = 0;
+                if(abs(my_dx + d.image_origin_x) > hidden_portion_width){
+                    my_dx = 0;
                 }
                 break;
         }
-        if(dx != 0.0 || dy != 0.0){
-            d.image_origin_x += dx;
-            d.image_origin_y += dy;
+        if(my_dx != 0.0 || my_dy != 0.0){
+            d.image_origin_x += my_dx;
+            d.image_origin_y += my_dy;
             d.preserved_progress_x = (d.image_origin_x) / cairo_image_surface_get_width(d.image);
             d.preserved_progress_y = (d.image_origin_y) / cairo_image_surface_get_height(d.image);
             gtk_widget_queue_draw(ui.vellum);
+        }
+        else{
+            if(dy > 0){
+                previous_page();
+            }
+            else if(dy < 0){
+                next_page();
+            }
         }
     }
     else if(ui.app_mode == TOCMode){
@@ -1508,7 +1518,7 @@ import_pdf(void)
                                                      GTK_RESPONSE_ACCEPT,
                                                      NULL);
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
-                                        "/home/reza/Desktop");
+                                        ".");
     GtkFileFilter *file_filter = gtk_file_filter_new();
     gtk_file_filter_add_pattern(file_filter,
                                 "*.pdf");
