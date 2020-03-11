@@ -52,6 +52,9 @@ struct Ui
     Rect *app_info_area_rect;
     const char *app_info_text;
     /* reading mode widgets */
+    /* panel */
+    Rect *panel_rect;
+    gboolean is_panel_hovered;
     /* page navigation */
     gboolean is_next_prev_page_hovered;
     /* zoom widget */

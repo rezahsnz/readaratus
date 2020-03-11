@@ -414,8 +414,8 @@ walk_poppler_index(PopplerDocument  *doc,
 }
 
 void
-toc_fix_label_blindly(TOCItem    *toc_item,
-                      const char *label_parent)
+toc_fix_labels_blindly(TOCItem    *toc_item,
+                       const char *label_parent)
 {
     /* 
       for tocs that do not provide labels or ids, we will blindly generate
@@ -437,8 +437,8 @@ toc_fix_label_blindly(TOCItem    *toc_item,
     }
     GList *list_p = toc_item->children;
     while(list_p){
-        toc_fix_label_blindly(list_p->data,
-                          toc_item->label);
+        toc_fix_labels_blindly(list_p->data,
+                               toc_item->label);
         list_p = list_p->next;
     }
 }
@@ -462,8 +462,8 @@ toc_create_from_poppler_index(PopplerDocument *doc,
                    NULL,
                    &has_labels);
     if(!has_labels){
-        toc_fix_label_blindly(*head_item,
-                              NULL);
+        toc_fix_labels_blindly(*head_item,
+                               NULL);
         g_print("TOC is blindly labeled, bear with it.\n");
     }
     (*head_item)->depth = 0;    

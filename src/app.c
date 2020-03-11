@@ -49,7 +49,7 @@ static const double gotham_green_r = 0.0,
 static const double giants_orange_r = 0.9960,
                     giants_orange_g = 0.3529,
                     giants_orange_b = 0.1137;
-/* darkblue: #FE5A1D, (254, 90, 29) */
+/* darkblue: #, (254, 90, 29) */
 static const double blue_r = 0,
                     blue_g = 0,
                     blue_b = 1;
@@ -61,10 +61,8 @@ static const double toc_navigation_panel_height = 72;
 static void 
 pose_page_widgets(void)
 {
-    int widget_width = gtk_widget_get_allocated_width(ui.vellum);
-    int widget_height = gtk_widget_get_allocated_height(ui.vellum);
-    int padding = 8;
-    int button_size = 47;
+    double widget_width = gtk_widget_get_allocated_width(ui.vellum);
+    double widget_height = gtk_widget_get_allocated_height(ui.vellum);
     /* start mode widgets */
     ui.import_area_rect->x1 = 0;
     ui.import_area_rect->y1 = 0;
@@ -79,51 +77,15 @@ pose_page_widgets(void)
     ui.app_info_area_rect->x2 = ui.app_info_area_rect->x1 + widget_width / 2;
     ui.app_info_area_rect->y2 = ui.app_info_area_rect->y1 + widget_height * 0.75;
     /* reading mode widgets */
-    /* page fit */
-    ui.zoom_widget_PF_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_PF_rect->y1 = padding;
-    ui.zoom_widget_PF_rect->x2 = ui.zoom_widget_PF_rect->x1 + button_size;
-    ui.zoom_widget_PF_rect->y2 = ui.zoom_widget_PF_rect->y1 + button_size;
-    /* width fit */
-    ui.zoom_widget_WF_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_WF_rect->y1 = button_size + 2 * padding;
-    ui.zoom_widget_WF_rect->x2 = ui.zoom_widget_WF_rect->x1 + button_size;
-    ui.zoom_widget_WF_rect->y2 = ui.zoom_widget_WF_rect->y1 + button_size;
-    /* zoom in */
-    ui.zoom_widget_IN_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_IN_rect->y1 = 2 * button_size + 3 * padding;
-    ui.zoom_widget_IN_rect->x2 = ui.zoom_widget_IN_rect->x1 + button_size;
-    ui.zoom_widget_IN_rect->y2 = ui.zoom_widget_IN_rect->y1 + button_size;
-    /* zoom out */
-    ui.zoom_widget_OUT_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_OUT_rect->y1 = 3 * button_size + 4 * padding;
-    ui.zoom_widget_OUT_rect->x2 = ui.zoom_widget_OUT_rect->x1 + button_size;
-    ui.zoom_widget_OUT_rect->y2 = ui.zoom_widget_OUT_rect->y1 + button_size;
-    /* prev page */
-    ui.prev_page_button_rect->x1 = padding;
-    ui.prev_page_button_rect->y1 = widget_height / 2 - button_size / 2;
-    ui.prev_page_button_rect->x2 = ui.prev_page_button_rect->x1 + button_size;
-    ui.prev_page_button_rect->y2 = ui.prev_page_button_rect->y1 + button_size;
-    /* next page */
-    ui.next_page_button_rect->x1 = widget_width - button_size - padding;
-    ui.next_page_button_rect->y1 = widget_height / 2 - button_size / 2;
-    ui.next_page_button_rect->x2 = ui.next_page_button_rect->x1 + button_size;
-    ui.next_page_button_rect->y2 = ui.next_page_button_rect->y1 + button_size;
-    /* teleport launcher */
-    ui.teleport_launcher_rect->x1 = padding;
-    ui.teleport_launcher_rect->y1 = widget_height - button_size - padding;
-    ui.teleport_launcher_rect->x2 = ui.teleport_launcher_rect->x1 + button_size;
-    ui.teleport_launcher_rect->y2 = ui.teleport_launcher_rect->y1 + button_size;
-    /* find text launcher */
-    ui.find_text_launcher_rect->x1 = ui.teleport_launcher_rect->x2 + padding;
-    ui.find_text_launcher_rect->y1 = widget_height - button_size - padding;
-    ui.find_text_launcher_rect->x2 = ui.find_text_launcher_rect->x1 + button_size;
-    ui.find_text_launcher_rect->y2 = ui.find_text_launcher_rect->y1 + button_size;
-    /* TOC launcher */
-    ui.toc_launcher_rect->x1 = ui.find_text_launcher_rect->x2 + padding;
-    ui.toc_launcher_rect->y1 = widget_height - button_size - padding;
-    ui.toc_launcher_rect->x2 = ui.toc_launcher_rect->x1 + button_size;
-    ui.toc_launcher_rect->y2 = ui.toc_launcher_rect->y1 + button_size;    
+    const double panel_button_size = widget_width > 800 ? 47 : 33,
+                 panel_margin = widget_width > 800 ? 12 : 8;
+    const double panel_width = 2 * panel_margin + 
+        2 * (panel_button_size + panel_margin) + 7 * panel_button_size;
+    const double panel_height = 2 * panel_margin + 2.75 * panel_button_size;
+    ui.panel_rect->x1 = widget_width / 2 - panel_width / 2;
+    ui.panel_rect->y1 = widget_height - panel_height - panel_margin;
+    ui.panel_rect->x2 = ui.panel_rect->x1 + panel_width;
+    ui.panel_rect->y2 = ui.panel_rect->y1 + panel_height;
 }
 
 static cairo_surface_t *
@@ -1217,6 +1179,9 @@ fix_page_labels(void)
             g_free(meta->page_label->label);
             meta->page_label->label = g_strdup_printf("%d",
                                                       page_num + 1);
+            g_hash_table_insert(d.page_label_num_hash,
+                                meta->page_label->label,
+                                GINT_TO_POINTER(page_num));
         }
         g_print("Majority of the pages provide no labels, using page index instead.\n");
         return;
@@ -1518,7 +1483,7 @@ import_pdf(void)
                                                      GTK_RESPONSE_ACCEPT,
                                                      NULL);
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
-                                        ".");
+                                        "/home/reza/book");
     GtkFileFilter *file_filter = gtk_file_filter_new();
     gtk_file_filter_add_pattern(file_filter,
                                 "*.pdf");
@@ -1976,6 +1941,9 @@ teleport(const char *term)
                   0, 0);
         g_free(object_name);
         return;
+    }
+    else{
+        g_print("'%s' is not pagenum: %d\n", object_name, page_num);
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
     GError *err = NULL;
@@ -2521,41 +2489,6 @@ draw_reading_mode(cairo_t *cr)
     cairo_set_source_rgb(cr,
                          gotham_green_r, gotham_green_g, gotham_green_b);
     cairo_stroke(cr);
-    /* figures */
-    // if(meta->figures){
-    //     GHashTableIter iter;
-    //     gpointer key, value;
-    //     g_hash_table_iter_init (&iter, meta->figures);
-    //     while(g_hash_table_iter_next(&iter, &key, &value)){        
-    //         Figure *fig = value;
-    //         Rect image_rect = map_physical_rect_to_image(fig->image_physical_layout,
-    //                                                 meta->page_width,
-    //                                                 meta->page_height,
-    //                                                 image_width,
-    //                                                 image_height,
-    //                                                 d.image_origin_x,
-    //                                                 d.image_origin_y); 
-    //         cairo_rectangle(cr,
-    //                         image_rect.x1,
-    //                         image_rect.y1,
-    //                         image_rect.x2 - image_rect.x1,
-    //                         image_rect.y2 - image_rect.y1);      
-    //         Rect caption_rect = map_physical_rect_to_image(fig->caption_physical_layout,
-    //                                                   meta->page_width,
-    //                                                   meta->page_height,
-    //                                                   image_width,
-    //                                                   image_height,
-    //                                                   d.image_origin_x,
-    //                                                   d.image_origin_y);
-    //         cairo_rectangle(cr,
-    //                         caption_rect.x1,
-    //                         caption_rect.y1,
-    //                         caption_rect.x2 - caption_rect.x1,
-    //                         caption_rect.y2 - caption_rect.y1);
-    //         cairo_set_source_rgb(cr, 1, 0, 0);
-    //         cairo_stroke(cr);
-    //     }   
-    // }
     /* referenced figures */
     list_p = meta->referenced_figures;
     while(list_p){
@@ -2655,221 +2588,7 @@ draw_reading_mode(cairo_t *cr)
     }
     cairo_set_dash(cr,
                    NULL, 0, 0);
-    /* page widgets */
-    /* prev button */
-    if(d.cur_page_num > 0){
-        cairo_rectangle(cr,
-                        ui.prev_page_button_rect->x1, ui.prev_page_button_rect->y1,
-                        rect_width(ui.prev_page_button_rect), rect_height(ui.prev_page_button_rect));
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, ui.is_prev_page_button_hovered ? 0.9 : 0.2); /* light gray */
-        cairo_fill(cr);
-        draw_text(cr,
-                  "<span font='sans 16' foreground='#666666'><b>&#60;</b></span>",
-                  PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
-                  ui.prev_page_button_rect);    
-    }
-    /* next button */
-    if(d.cur_page_num < d.num_pages - 1){
-        cairo_rectangle(cr,
-                        ui.next_page_button_rect->x1, ui.next_page_button_rect->y1,
-                        rect_width(ui.next_page_button_rect), rect_height(ui.next_page_button_rect));
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, ui.is_next_page_button_hovered ? 0.9 : 0.2); /* light gray */
-        cairo_fill(cr);
-        draw_text(cr,
-                  "<span font='sans 16' foreground='#666666'><b>&#62;</b></span>",
-                  PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
-                  ui.next_page_button_rect);        
-    }
-    /* reading progress */
-    int padding = 10;
-    double text_width, text_height;
-    if(meta->page_label->label){
-        char *reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%s</i> of %d</span>",
-                                                      meta->page_label->label,
-                                                      d.num_pages);
-        get_text_size(cr,
-                      reading_progress_text,
-                      &text_width, &text_height);
-        Rect reading_progress_rect;
-        reading_progress_rect.x1 = widget_width - text_width - 3 * padding;
-        reading_progress_rect.y1 = widget_height - text_height - 3 * padding;
-        reading_progress_rect.x2 = reading_progress_rect.x1 + text_width + 2 * padding;
-        reading_progress_rect.y2 = reading_progress_rect.y1 + text_height + 2 * padding;
-        cairo_rectangle(cr,
-                        reading_progress_rect.x1,
-                        reading_progress_rect.y1,
-                        rect_width(&reading_progress_rect),
-                        rect_height(&reading_progress_rect));
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-        cairo_fill(cr);
-        cairo_set_source_rgb(cr,
-                             0.1333, 0.1333, 0.1333);
-        double visual_progress_height = 8;    
-        cairo_rectangle(cr,
-                        reading_progress_rect.x1 + 1,
-                        reading_progress_rect.y2 - visual_progress_height,
-                        rect_width(&reading_progress_rect) - 2,
-                        visual_progress_height);
-        cairo_stroke(cr);
-        cairo_rectangle(cr,
-                        reading_progress_rect.x1 + 2,
-                        reading_progress_rect.y2 - visual_progress_height + 1,
-                        ((double)(d.cur_page_num + 1) / d.num_pages) * (rect_width(&reading_progress_rect) - 4),
-                        visual_progress_height - 2);
-        cairo_fill(cr);
-        draw_text(cr,
-                  reading_progress_text,
-                  PANGO_ALIGN_CENTER,
-                  PANGO_ALIGN_CENTER,
-                  &reading_progress_rect);
-        g_free(reading_progress_text);
-    }
-    /* zoom widget */
-    /* page fit */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_PF_rect->x1,
-                    ui.zoom_widget_PF_rect->y1,
-                    rect_width(ui.zoom_widget_PF_rect),
-                    rect_height(ui.zoom_widget_PF_rect));
-    if(ui.is_zoom_widget_PF_hovered || d.zoom_level == PageFit){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);                
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'>Page\n<b>F</b>it</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_PF_rect);
-    /* width fit */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_WF_rect->x1,
-                    ui.zoom_widget_WF_rect->y1,
-                    rect_width(ui.zoom_widget_WF_rect),
-                    rect_height(ui.zoom_widget_WF_rect));
-    if(ui.is_zoom_widget_WF_hovered  || d.zoom_level == WidthFit){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);                
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'>Fit to\n<b>w</b>idth</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_WF_rect);
-    /* zoom in */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_IN_rect->x1,
-                    ui.zoom_widget_IN_rect->y1,
-                    rect_width(ui.zoom_widget_IN_rect),
-                    rect_height(ui.zoom_widget_IN_rect));
-    if(ui.is_zoom_widget_IN_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 12' foreground='#222222'>+</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_IN_rect);
-    /* zoom out */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_OUT_rect->x1,
-                    ui.zoom_widget_OUT_rect->y1,
-                    rect_width(ui.zoom_widget_OUT_rect),
-                    rect_height(ui.zoom_widget_OUT_rect));
-    if(ui.is_zoom_widget_OUT_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'>-</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_OUT_rect);
-    /* launchers */
-    /* Teleport */
-    cairo_rectangle(cr,
-                    ui.teleport_launcher_rect->x1,
-                    ui.teleport_launcher_rect->y1,
-                    rect_width(ui.teleport_launcher_rect),
-                    rect_height(ui.teleport_launcher_rect));
-    if(ui.is_teleport_launcher_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'><b>T</b>ele\nport</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.teleport_launcher_rect);
-    /* find */
-    cairo_rectangle(cr,
-                    ui.find_text_launcher_rect->x1,
-                    ui.find_text_launcher_rect->y1,
-                    rect_width(ui.find_text_launcher_rect),
-                    rect_height(ui.find_text_launcher_rect));
-    if(ui.is_find_text_launcher_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'><u><b>F</b></u>ind</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.find_text_launcher_rect);
-    /* toc */
-    cairo_rectangle(cr,
-                    ui.toc_launcher_rect->x1,
-                    ui.toc_launcher_rect->y1,
-                    rect_width(ui.toc_launcher_rect),
-                    rect_height(ui.toc_launcher_rect));
-    if(ui.is_toc_launcher_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'><u><b>T</b></u>OC</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.toc_launcher_rect);
-    /* active referenced figure is overlaid on the page */
+    /* active referenced figure */
     if(meta->active_referenced_figure){        
         cairo_surface_t *ref_surface = meta->active_referenced_figure->reference->image;
         double ref_image_width = cairo_image_surface_get_width(ref_surface);
@@ -2972,6 +2691,351 @@ draw_reading_mode(cairo_t *cr)
             cairo_surface_destroy(ref_surface);
         }      
     }
+    /* panel */
+    if(!ui.is_panel_hovered){
+        return;
+    }
+    const double panel_button_size = widget_width > 800 ? 47 : 33,
+                 panel_margin = widget_width > 800 ? 12 : 8;    
+    cairo_rectangle(cr,
+                    ui.panel_rect->x1, ui.panel_rect->y1,
+                    rect_width(ui.panel_rect), rect_height(ui.panel_rect));
+    cairo_set_source_rgba(cr,
+                          silver_r, silver_r, silver_r, 0.9);
+    cairo_fill(cr);
+    Rect tools_label_rect;
+    tools_label_rect.x1 = ui.panel_rect->x1 + panel_margin;
+    tools_label_rect.y1 = ui.panel_rect->y1 + panel_margin;
+    tools_label_rect.x2 = tools_label_rect.x1 + 3 * (panel_button_size + panel_margin) - panel_margin;
+    tools_label_rect.y2 = tools_label_rect.y1 + panel_button_size * 0.25;
+    draw_text(cr,
+              "<span font='sans 8' foreground='#222222'><b>Tools</b></span>",
+              PANGO_ALIGN_CENTER,
+              PANGO_ALIGN_CENTER,
+              &tools_label_rect);
+    const double active_buttone_tone = 0.2666,
+                 normal_button_tone = 0.4666;
+    /* teleport launcher */
+    ui.teleport_launcher_rect->x1 = ui.panel_rect->x1 + panel_margin;
+    ui.teleport_launcher_rect->y1 = tools_label_rect.y2 + panel_margin;
+    ui.teleport_launcher_rect->x2 = ui.teleport_launcher_rect->x1 + panel_button_size;
+    ui.teleport_launcher_rect->y2 = ui.teleport_launcher_rect->y1 + panel_button_size;
+    double button_tone = ui.is_teleport_launcher_hovered ? active_buttone_tone
+                                                         : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.1,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.6);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.1,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.7);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.40,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.8);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.6,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.8);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.9,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.7);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.9,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.6);
+    cairo_close_path(cr);    
+    cairo_fill(cr);
+    cairo_rectangle(cr,
+                    ui.teleport_launcher_rect->x1 + panel_button_size * 0.25,
+                    ui.teleport_launcher_rect->y1 + panel_button_size * 0.15,
+                    panel_button_size * 0.5, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.teleport_launcher_rect->x1 + panel_button_size * 0.325,
+                    ui.teleport_launcher_rect->y1 + panel_button_size * 0.35,
+                    panel_button_size * 0.35, panel_button_size * 0.075);
+    cairo_rectangle(cr,
+                    ui.teleport_launcher_rect->x1 + panel_button_size * 0.4,
+                    ui.teleport_launcher_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.2, panel_button_size * 0.035);
+    cairo_fill(cr);
+    /* find launcher */
+    ui.find_text_launcher_rect->x1 = ui.teleport_launcher_rect->x2 + panel_margin;
+    ui.find_text_launcher_rect->y1 = ui.teleport_launcher_rect->y1;
+    ui.find_text_launcher_rect->x2 = ui.find_text_launcher_rect->x1 + panel_button_size;
+    ui.find_text_launcher_rect->y2 = ui.find_text_launcher_rect->y1 + panel_button_size;
+    button_tone = ui.is_find_text_launcher_hovered ? active_buttone_tone
+                                                   : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_set_line_width(cr,
+                         2);
+    cairo_arc(cr,
+              ui.find_text_launcher_rect->x1 + panel_button_size * 0.25,
+              ui.find_text_launcher_rect->y1 + panel_button_size * 0.5,
+              panel_button_size * 0.15,
+              0, 2 * M_PI);
+    cairo_stroke(cr);
+    cairo_arc(cr,
+          ui.find_text_launcher_rect->x1 + panel_button_size * 0.75,
+          ui.find_text_launcher_rect->y1 + panel_button_size * 0.5,
+          panel_button_size * 0.15,
+          0, 2 * M_PI);
+    cairo_stroke(cr);
+    cairo_set_line_width(cr,
+                         1);
+    cairo_rectangle(cr,
+                    ui.find_text_launcher_rect->x1 + panel_button_size * 0.4,
+                    ui.find_text_launcher_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.2, panel_button_size * 0.05);
+    cairo_fill(cr);
+    cairo_move_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.1,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.03,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.53);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.9,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.97,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.53);
+    cairo_stroke(cr);
+    /* toc launcher */
+    ui.toc_launcher_rect->x1 = ui.find_text_launcher_rect->x2 + panel_margin;
+    ui.toc_launcher_rect->y1 = ui.find_text_launcher_rect->y1;
+    ui.toc_launcher_rect->x2 = ui.toc_launcher_rect->x1 + panel_button_size;
+    ui.toc_launcher_rect->y2 = ui.toc_launcher_rect->y1 + panel_button_size;
+    button_tone = ui.is_toc_launcher_hovered ? active_buttone_tone
+                                             : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.1,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.1,
+                    panel_button_size * 0.25, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.3,
+                    panel_button_size * 0.25, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.6,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.5,
+                    panel_button_size * 0.25, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.7,
+                    panel_button_size * 0.25, panel_button_size * 0.15);    
+    cairo_fill(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.25);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.775);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.375);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.375);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.775);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.775);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.475,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.45);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.475,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.575);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.6,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.575);
+    cairo_stroke(cr);
+    /* zoom */
+    Rect zoom_label_rect;
+    zoom_label_rect.x1 = ui.panel_rect->x2 - panel_margin - 4 * (panel_button_size + panel_margin) + panel_margin;
+    zoom_label_rect.y1 = ui.panel_rect->y1 + panel_margin;
+    zoom_label_rect.x2 = zoom_label_rect.x1 + 4 * (panel_button_size + panel_margin) - panel_margin;
+    zoom_label_rect.y2 = zoom_label_rect.y1 + panel_button_size * 0.25;
+    draw_text(cr,
+              "<span font='sans 8' foreground='#222222'><b>Zoom</b></span>",
+              PANGO_ALIGN_CENTER,
+              PANGO_ALIGN_CENTER,
+              &zoom_label_rect);
+    /* zoom out */
+    ui.zoom_widget_OUT_rect->x1 = ui.panel_rect->x2 - panel_button_size - panel_margin;
+    ui.zoom_widget_OUT_rect->y1 = zoom_label_rect.y2 + panel_margin;
+    ui.zoom_widget_OUT_rect->x2 = ui.zoom_widget_OUT_rect->x1 + panel_button_size;
+    ui.zoom_widget_OUT_rect->y2 = ui.zoom_widget_OUT_rect->y1 + panel_button_size;
+    button_tone = ui.is_zoom_widget_OUT_hovered ? active_buttone_tone
+                                                : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_OUT_rect->x1 + panel_button_size * 0.35,
+                    ui.zoom_widget_OUT_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.3, panel_button_size * 0.05);
+    cairo_fill(cr);
+    /* zoom in */
+    ui.zoom_widget_IN_rect->x1 = ui.zoom_widget_OUT_rect->x1 - panel_button_size - panel_margin;
+    ui.zoom_widget_IN_rect->y1 = ui.zoom_widget_OUT_rect->y1;
+    ui.zoom_widget_IN_rect->x2 = ui.zoom_widget_IN_rect->x1 + panel_button_size;
+    ui.zoom_widget_IN_rect->y2 = ui.zoom_widget_IN_rect->y1 + panel_button_size;
+    button_tone = ui.is_zoom_widget_IN_hovered ? active_buttone_tone
+                                                : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_IN_rect->x1 + panel_button_size * 0.35,
+                    ui.zoom_widget_IN_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.3, panel_button_size * 0.05);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_IN_rect->x1 + panel_button_size * 0.475,
+                    ui.zoom_widget_IN_rect->y1 + panel_button_size * 0.35,
+                    panel_button_size * 0.05, panel_button_size * 0.3);
+    cairo_fill(cr);
+    /* width fit */
+    ui.zoom_widget_WF_rect->x1 = ui.zoom_widget_IN_rect->x1 - panel_button_size - panel_margin;
+    ui.zoom_widget_WF_rect->y1 = ui.zoom_widget_IN_rect->y1;
+    ui.zoom_widget_WF_rect->x2 = ui.zoom_widget_WF_rect->x1 + panel_button_size;
+    ui.zoom_widget_WF_rect->y2 = ui.zoom_widget_WF_rect->y1 + panel_button_size;
+    button_tone = ui.is_zoom_widget_WF_hovered ? active_buttone_tone
+                                               : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.3,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.35);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.1,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.3,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.65);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_move_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.7,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.35);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.9,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.7,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.65);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.25,
+                    ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.45, panel_button_size * 0.05);
+    cairo_fill(cr);
+    /* page fit */
+    ui.zoom_widget_PF_rect->x1 = ui.zoom_widget_WF_rect->x1 - panel_button_size - panel_margin;
+    ui.zoom_widget_PF_rect->y1 = ui.zoom_widget_WF_rect->y1;
+    ui.zoom_widget_PF_rect->x2 = ui.zoom_widget_PF_rect->x1 + panel_button_size;
+    ui.zoom_widget_PF_rect->y2 = ui.zoom_widget_PF_rect->y1 + panel_button_size;
+    button_tone = ui.is_zoom_widget_PF_hovered ? active_buttone_tone
+                                               : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_PF_rect->x1 + panel_button_size * 0.315,
+                    ui.zoom_widget_PF_rect->y1 + panel_button_size * 0.25,
+                    panel_button_size * 0.37, panel_button_size * 0.5);    
+    cairo_set_line_width(cr,
+                         2);
+    cairo_stroke(cr);       
+    cairo_set_line_width(cr,
+                         1);
+    /* prev page button */
+    ui.prev_page_button_rect->x1 = ui.panel_rect->x1 + panel_margin;
+    ui.prev_page_button_rect->y1 = ui.panel_rect->y2 - panel_button_size - panel_margin;
+    ui.prev_page_button_rect->x2 = ui.prev_page_button_rect->x1 + panel_button_size;
+    ui.prev_page_button_rect->y2 = ui.prev_page_button_rect->y1 + panel_button_size;
+    button_tone = ui.is_prev_page_button_hovered ? active_buttone_tone
+                                                 : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.prev_page_button_rect->x1 + panel_button_size * 0.85,
+                  ui.prev_page_button_rect->y1 + panel_button_size * 0.15);
+    cairo_line_to(cr,
+                  ui.prev_page_button_rect->x1 + panel_button_size * 0.15,
+                  ui.prev_page_button_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.prev_page_button_rect->x1 + panel_button_size * 0.85,
+                  ui.prev_page_button_rect->y1 + panel_button_size * 0.85);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    /* next page button */
+    ui.next_page_button_rect->x1 = ui.panel_rect->x2 - panel_button_size - panel_margin;
+    ui.next_page_button_rect->y1 = ui.prev_page_button_rect->y1;
+    ui.next_page_button_rect->x2 = ui.next_page_button_rect->x1 + panel_button_size;
+    ui.next_page_button_rect->y2 = ui.next_page_button_rect->y1 + panel_button_size;
+    button_tone = ui.is_next_page_button_hovered ? active_buttone_tone
+                                                 : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.next_page_button_rect->x1 + panel_button_size * 0.15,
+                  ui.next_page_button_rect->y1 + panel_button_size * 0.15);
+    cairo_line_to(cr,
+                  ui.next_page_button_rect->x1 + panel_button_size * 0.85,
+                  ui.next_page_button_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.next_page_button_rect->x1 + panel_button_size * 0.15,
+                  ui.next_page_button_rect->y1 + panel_button_size * 0.85);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    /* reading progress */
+    Rect reading_progress_rect;
+    reading_progress_rect.x1 = ui.prev_page_button_rect->x2 + panel_margin;
+    reading_progress_rect.y1 = ui.prev_page_button_rect->y1;
+    reading_progress_rect.x2 = ui.next_page_button_rect->x1 - panel_margin;
+    reading_progress_rect.y2 = ui.next_page_button_rect->y2;
+    cairo_rectangle(cr,
+                    reading_progress_rect.x1,
+                    reading_progress_rect.y1,
+                    rect_width(&reading_progress_rect),
+                    rect_height(&reading_progress_rect));
+    cairo_set_source_rgba(cr,
+                          normal_button_tone, normal_button_tone, normal_button_tone, 0.8);
+    cairo_fill(cr);
+    double progress = ((double)(d.cur_page_num + 1) / d.num_pages);  
+    cairo_rectangle(cr,
+                    reading_progress_rect.x1 + 2,
+                    reading_progress_rect.y1 + 2,
+                    progress * (rect_width(&reading_progress_rect) - 4),
+                    panel_button_size - 4);
+    cairo_set_source_rgba(cr,
+                          active_buttone_tone, active_buttone_tone, active_buttone_tone, 0.8);
+    cairo_fill(cr);    
+    if(meta->page_label->label){
+        PageMeta *last_page_meta = g_ptr_array_index(d.metae,
+                                                     d.num_pages - 1);
+        char *last_page_label = (last_page_meta->page_label->label)
+         ? g_strdup_printf("%s", last_page_meta->page_label->label)
+         : g_strdup_printf("%d", d.num_pages);
+        char *reading_progress_text = g_strdup_printf("<span font='sans 8' foreground='black'><b>%s of %s</b></span>",
+                                                      meta->page_label->label,
+                                                      last_page_label);
+        draw_text(cr,
+                  reading_progress_text,
+                  PANGO_ALIGN_CENTER,
+                  PANGO_ALIGN_CENTER,
+                  &reading_progress_rect);
+        g_free(last_page_label);
+        g_free(reading_progress_text);
+    }
+
 }
 
 static void
@@ -3860,29 +3924,33 @@ motion_event_callback (GtkWidget      *widget,
             }
             list_p = list_p->next;            
         }
-        /* navigation widget hover */
-        ui.is_prev_page_button_hovered = d.cur_page_num > 0 &&
-                                         rect_contains_point(ui.prev_page_button_rect,
-                                                             event->x, event->y);
-        ui.is_next_page_button_hovered = d.cur_page_num < d.num_pages - 1 &&
-                                         rect_contains_point(ui.next_page_button_rect,
-                                                             event->x, event->y);
-        /* zoom widget */
-        ui.is_zoom_widget_PF_hovered = rect_contains_point(ui.zoom_widget_PF_rect,
-                                                           event->x, event->y);    
-        ui.is_zoom_widget_WF_hovered = rect_contains_point(ui.zoom_widget_WF_rect,
-                                                           event->x, event->y);
-        ui.is_zoom_widget_IN_hovered = rect_contains_point(ui.zoom_widget_IN_rect,
-                                                           event->x, event->y);
-        ui.is_zoom_widget_OUT_hovered = rect_contains_point(ui.zoom_widget_OUT_rect,
-                                                            event->x, event->y);
-        /* launchers */
-        ui.is_teleport_launcher_hovered = rect_contains_point(ui.teleport_launcher_rect,
-                                                              event->x, event->y);
-        ui.is_find_text_launcher_hovered = rect_contains_point(ui.find_text_launcher_rect,
+        /* panel */
+        ui.is_panel_hovered = rect_contains_point(ui.panel_rect,
+                                                  event->x, event->y);
+        if(ui.is_panel_hovered){
+            ui.is_prev_page_button_hovered = d.cur_page_num > 0 &&
+                                             rect_contains_point(ui.prev_page_button_rect,
+                                                                 event->x, event->y);
+            ui.is_next_page_button_hovered = d.cur_page_num < d.num_pages - 1 &&
+                                             rect_contains_point(ui.next_page_button_rect,
+                                                                 event->x, event->y);
+            /* zoom widget */
+            ui.is_zoom_widget_PF_hovered = rect_contains_point(ui.zoom_widget_PF_rect,
+                                                               event->x, event->y);    
+            ui.is_zoom_widget_WF_hovered = rect_contains_point(ui.zoom_widget_WF_rect,
                                                                event->x, event->y);
-        ui.is_toc_launcher_hovered = rect_contains_point(ui.toc_launcher_rect,
-                                                         event->x, event->y);
+            ui.is_zoom_widget_IN_hovered = rect_contains_point(ui.zoom_widget_IN_rect,
+                                                               event->x, event->y);
+            ui.is_zoom_widget_OUT_hovered = rect_contains_point(ui.zoom_widget_OUT_rect,
+                                                                event->x, event->y);
+            /* launchers */
+            ui.is_teleport_launcher_hovered = rect_contains_point(ui.teleport_launcher_rect,
+                                                                  event->x, event->y);
+            ui.is_find_text_launcher_hovered = rect_contains_point(ui.find_text_launcher_rect,
+                                                                   event->x, event->y);
+            ui.is_toc_launcher_hovered = rect_contains_point(ui.toc_launcher_rect,
+                                                             event->x, event->y);
+        }        
         is_cursor_set = is_link_hovered ||
                         ui.is_prev_page_button_hovered || ui.is_next_page_button_hovered ||
                         ui.is_zoom_widget_PF_hovered || ui.is_zoom_widget_WF_hovered || 
@@ -4116,7 +4184,7 @@ destroy_app()
     rect_free(ui.book_details_area_rect);
     rect_free(ui.continue_to_book_button_rect);
     rect_free(ui.app_info_area_rect);
-    
+    rect_free(ui.panel_rect);
     rect_free(ui.zoom_widget_PF_rect);
     rect_free(ui.zoom_widget_WF_rect);
     rect_free(ui.zoom_widget_IN_rect);
@@ -4157,10 +4225,12 @@ on_app_quit(GtkWidget *widget,
 void
 init_app(GtkApplication *app)
 {
+    const double widget_width = 640,
+                 widget_height = 480;
     ui.main_window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(ui.main_window), "readaratus");
     gtk_window_set_default_size(GTK_WINDOW(ui.main_window),
-                                800, 600);
+                                widget_width, widget_height);
     gtk_widget_set_events(ui.main_window, 
                           GDK_STRUCTURE_MASK);
     ui.is_fullscreen = FALSE;
@@ -4168,7 +4238,7 @@ init_app(GtkApplication *app)
                      G_CALLBACK(window_state_callback), NULL);
     ui.vellum = gtk_drawing_area_new();
     gtk_widget_set_size_request(ui.vellum,
-                                800, 600);
+                                widget_width, widget_height);
     gtk_widget_set_has_tooltip(ui.vellum,
                                TRUE);
     g_signal_connect(G_OBJECT(ui.vellum), "draw",
@@ -4220,6 +4290,9 @@ init_app(GtkApplication *app)
                                               "text"); 
     ui.pointer_cursor = gdk_cursor_new_from_name(gtk_widget_get_display(ui.vellum),
                                                  "pointer"); 
+    /* panel */
+    ui.panel_rect = rect_new();
+    ui.is_panel_hovered = FALSE;
     /* zoom widget */
     ui.is_zoom_widget_PF_hovered = FALSE;
     ui.zoom_widget_PF_rect = rect_new();

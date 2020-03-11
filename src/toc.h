@@ -102,8 +102,8 @@ toc_search_by_title(const TOCItem *toc_item,
                     const char    *title);
 
 void
-toc_label_blindly(TOCItem    *toc_item,
-                  const char *label_parent);
+toc_fix_labels_blindly(TOCItem    *toc_item,
+                       const char *label_parent);
 
 void
 toc_create_from_poppler_index(PopplerDocument *doc,
