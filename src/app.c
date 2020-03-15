@@ -659,20 +659,22 @@ merge_images(GList *image_mappings,
 }
 
 static cairo_surface_t *
-stich_merged_images (PageMeta *meta,
-                     Figure   *figure)
-{    
-    /* crop the rectangle that holds the image(s) from the rendered
-       page (to the maximum size obtained from the resolution of the surface)  */
-    double aspect_ratio = meta->page_height / meta->page_width;
-    /* @ smalles image might be better for scaling */    
-    cairo_surface_t *surface = poppler_page_get_image(meta->page,
-                                                      figure->image_id);
-    double surface_width = cairo_image_surface_get_width(surface);
-    cairo_surface_destroy(surface);
-    double image_physical_width = rect_width(figure->image_physical_layout);
-    double page_render_width = surface_width * (meta->page_width / image_physical_width);
-    double page_render_height = page_render_width * aspect_ratio;
+create_image_for_figure(PageMeta *meta,
+                        Figure   *figure)
+{
+    /*
+      create the image that figure represents.
+      render the target page to a suitable resolution and then crop the image
+      out of it.
+    */
+    const double MIN_PAGE_WIDTH_PX = 640;
+    cairo_surface_t *first_image_surface = poppler_page_get_image(meta->page,
+                                                                  figure->image_id);
+    double page_render_width = cairo_image_surface_get_width(first_image_surface) * 
+        (meta->page_width / rect_width(figure->image_physical_layout));
+    page_render_width = MAX(MIN_PAGE_WIDTH_PX, page_render_width);
+    double page_render_height = meta->aspect_ratio * page_render_width;
+    cairo_surface_destroy(first_image_surface);
     cairo_surface_t *rendered_page = render_page(meta,
                                                  page_render_width,
                                                  page_render_height);
@@ -702,15 +704,12 @@ stich_merged_images (PageMeta *meta,
 }
 
 static void
-load_figures (int start_page)
+load_figures(void)
 {        
     gboolean labels_are_exclusive = FALSE,
              ids_are_complex = FALSE;
     GList *all_figures = NULL;
     for(int page_num = 0; page_num < d.num_pages; page_num++){
-        if(page_num < start_page){
-            continue;
-        }
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
         GList *image_mappings = poppler_page_get_image_mapping(meta->page);
@@ -719,10 +718,10 @@ load_figures (int start_page)
         while(image_mappings_p){
             GList *next = image_mappings_p->next;
             PopplerImageMapping *img = image_mappings_p->data;
-            double img_width = img->area.x2 - img->area.x1,
-                   img_height = img->area.y2 - img->area.y1;
-            if(fabs(img_width) < meta->mean_line_height ||
-               fabs(img_height) < meta->mean_line_height)
+            double img_width = fabs(img->area.x2 - img->area.x1),
+                   img_height = fabs(img->area.y2 - img->area.y1);
+            if(img_width < meta->mean_line_height ||
+               img_height < meta->mean_line_height)
             {
                 image_mappings = g_list_remove_link(image_mappings,
                                                     image_mappings_p);
@@ -738,13 +737,6 @@ load_figures (int start_page)
             poppler_page_free_image_mapping(image_mappings);
             continue;
         }
-        // g_print("page %d:\n", page_num);
-        // GList *tmp_p = fig_list;
-        // while(tmp_p){
-        //     Figure *fig = tmp_p->data;
-        //     g_print("'%s'\n", fig->whole_match);
-        //     tmp_p = tmp_p->next;
-        // }
         /* merge images that have non-null inresections */
         if(image_mappings->next){
             GList *image_mappings_p = image_mappings;
@@ -831,12 +823,8 @@ load_figures (int start_page)
             }                      
             image_mappings_p = image_mappings_p->next;        
         }        
-        GList *list_p = fig_list;
-        while(list_p){
-            figure_free(list_p->data);
-            list_p = list_p->next;
-        }  
-        g_list_free(fig_list);
+        g_list_free_full(fig_list,
+                         (GDestroyNotify)figure_free);
         poppler_page_free_image_mapping(image_mappings);
     }
     GList *figure_p = NULL;
@@ -915,8 +903,8 @@ load_figures (int start_page)
             PageMeta *meta = g_ptr_array_index(d.metae,
                                                       closest_figure->page_num);
             closest_figure->caption_physical_layout = closest_caption->physical_layout;
-            closest_figure->image = stich_merged_images(meta,
-                                                        closest_figure);
+            closest_figure->image = create_image_for_figure(meta,
+                                                            closest_figure);
             g_hash_table_insert(meta->figures,
                                 closest_figure->id,
                                 closest_figure);
@@ -926,24 +914,11 @@ load_figures (int start_page)
                                              closest_figure->image_id));
             g_hash_table_add(processed_figures_hash_table,
                              closest_figure);
-            /*g_print("%d-%d: %s\n", 
-                    closest_figure->page_num, closest_figure->image_id, closest_figure->whole_match); */
-        }     
-        else{
-            /*figure_p = figure_list_p->data;
-            Figure *figure = figure_p->data;
-            g_print("%d-%d: ?\n", 
-                    figure->page_num, figure->image_id);*/
         } 
         figure_list_p = figure_list_p->next;
     }
-    GList *keys = g_hash_table_get_keys(processed_images_hash_table);
-    GList *keys_p = keys;
-    while(keys_p){
-        g_free((char *)keys_p->data);
-        keys_p = keys_p->next;
-    }
-    g_list_free(keys);
+    g_list_free_full(g_hash_table_get_keys(processed_images_hash_table),
+                     (GDestroyNotify)g_free);
     g_hash_table_unref(processed_images_hash_table);
     
     figure_list_p = figures_per_image;
@@ -966,14 +941,11 @@ load_figures (int start_page)
 }
 
 static void
-resolve_referenced_figures (int start_page)
+resolve_referenced_figures(void)
 {
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
-        if(page_num < start_page){
-            continue;
-        }
         GList *ref_figures = extract_figure_references(meta->text);
         GList *list_p = ref_figures;
         while(list_p){
@@ -987,7 +959,7 @@ resolve_referenced_figures (int start_page)
                 list_p = list_p->next;
                 continue;
             }                    
-            for(int ref_page_num = start_page; ref_page_num < d.num_pages; ref_page_num++){
+            for(int ref_page_num = 0; ref_page_num < d.num_pages; ref_page_num++){
                 if(ref_page_num == page_num){
                     continue;
                 }
@@ -999,8 +971,6 @@ resolve_referenced_figures (int start_page)
                 Figure *reference = g_hash_table_lookup(ref_meta->figures,
                                                         ref_figure->id);
                 if(reference){
-                    /*g_print("'%s'(p%d) is located on page %d\n",
-                            figure->whole_match, figure->page_num, ref_figure->page_num);*/
                     char *needle = g_strdup_printf("%s %s",
                                                    ref_figure->label,
                                                    ref_figure->id);
@@ -1018,8 +988,6 @@ resolve_referenced_figures (int start_page)
                 }
             }
             if(!ref_figure->reference){
-                /*g_print("'%s'(p%d) is not referenced anywhere!\n",
-                        figure->whole_match, figure->page_num);*/
                 g_free(ref_figure->label);
                 g_free(ref_figure->id);
                 g_free(ref_figure);
@@ -1553,10 +1521,9 @@ import_pdf(void)
     load_toc();
     g_print("Converting units...\n");
     load_units();
-    int main_contents_start_page = 0;
     g_print("Loading figures...\n");
-    load_figures(main_contents_start_page);
-    resolve_referenced_figures(main_contents_start_page);
+    load_figures();
+    resolve_referenced_figures();
     setup_text_completions();
     g_print("Document is ready.\n");    
     ui.app_mode = ReadingMode;

@@ -163,8 +163,7 @@ extract_figure_captions (const char *text)
                                           -1,
                                           0,
                                           "",
-                                          0,
-                                          NULL);
+                                          0, NULL);
     GMatchInfo *match_info = NULL;
     g_regex_match(figure_caption_regex,
                   filtered_text,
