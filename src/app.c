@@ -340,6 +340,7 @@ scroll_with_pixels(double dx,
             gtk_widget_queue_draw(ui.vellum);
         }
         else{
+            /* semi continous mode */
             if(dy > 0){
                 previous_page();
             }
