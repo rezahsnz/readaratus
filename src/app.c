@@ -157,15 +157,15 @@ scale_page (enum ZoomLevel zl,
         d.image_origin_x = widget_width / 2.0 - image_width / 2.0;    
     }
     else{
-        double max_scrollable_width = image_width - widget_width;
-        d.image_origin_x = -MIN(progress_x * image_width, fabs(max_scrollable_width));
+        double hidden_width = image_width - widget_width;
+        d.image_origin_x = -MIN(fabs(progress_x * image_width), hidden_width / 2.0);
     }
     if(image_height <= widget_height){
         d.image_origin_y = widget_height / 2.0 - image_height / 2.0;
     }
     else{
-        double max_scrollable_height = image_height - widget_height;        
-        d.image_origin_y = -MIN(fabs(progress_y * image_height), fabs(max_scrollable_height));
+        double hidden_height = image_height - widget_height;        
+        d.image_origin_y = -MIN(fabs(progress_y * image_height), hidden_height);
     }
     cairo_surface_destroy(d.image);
     d.image = render_page(meta,
@@ -1264,7 +1264,9 @@ zero_document(void)
     d.toc.origin_x = 0;
     d.toc.origin_y = 0;
     d.find_details.selected_p = NULL;
-    d.find_details.find_results = NULL;    
+    d.find_details.find_results = NULL;
+    d.find_details.max_results = 0;
+    d.find_details.max_results_page_num = -1;    
 }
 
 static void
@@ -2118,6 +2120,15 @@ destroy_find_results(void)
     g_list_free(d.find_details.find_results);
     d.find_details.selected_p = NULL;
     d.find_details.find_results = NULL;
+    d.find_details.max_results = 0;
+    d.find_details.max_results_page_num = -1;
+}
+
+static void
+show_panel(void)
+{
+    ui.is_panel_hovered = TRUE;
+    gtk_widget_queue_draw(ui.vellum);
 }
 
 static void
@@ -2162,9 +2173,22 @@ on_find_request_received(GtkWidget *sender,
             result_p = result_p->next;
             i++;
         }
+        for(i = 0; i < d.num_pages; i++){
+            PageMeta *meta = g_ptr_array_index(d.metae,
+                                               i);
+            if(!meta->find_results){
+                continue;
+            }
+            int num_results = g_list_length(meta->find_results);
+            if(num_results > d.find_details.max_results){
+                d.find_details.max_results = num_results;
+                d.find_details.max_results_page_num = i;
+            }
+        }
         find_next();
     }    
     g_free(find_request);
+    show_panel();
 }
 
 static void
@@ -2659,7 +2683,7 @@ draw_reading_mode(cairo_t *cr)
         }      
     }
     /* panel */
-    if(!ui.is_panel_hovered){
+    if(!ui.is_panel_hovered || meta->active_referenced_figure){
         return;
     }
     const double panel_button_size = widget_width > 800 ? 47 : 33,
@@ -2873,8 +2897,8 @@ draw_reading_mode(cairo_t *cr)
     ui.zoom_widget_WF_rect->y1 = ui.zoom_widget_IN_rect->y1;
     ui.zoom_widget_WF_rect->x2 = ui.zoom_widget_WF_rect->x1 + panel_button_size;
     ui.zoom_widget_WF_rect->y2 = ui.zoom_widget_WF_rect->y1 + panel_button_size;
-    button_tone = ui.is_zoom_widget_WF_hovered ? active_buttone_tone
-                                               : normal_button_tone;
+    button_tone = (ui.is_zoom_widget_WF_hovered || d.zoom_level == WidthFit)
+                  ? active_buttone_tone : normal_button_tone;
     cairo_set_source_rgba(cr,
                           button_tone, button_tone, button_tone, 1);
     cairo_move_to(cr,
@@ -2909,8 +2933,8 @@ draw_reading_mode(cairo_t *cr)
     ui.zoom_widget_PF_rect->y1 = ui.zoom_widget_WF_rect->y1;
     ui.zoom_widget_PF_rect->x2 = ui.zoom_widget_PF_rect->x1 + panel_button_size;
     ui.zoom_widget_PF_rect->y2 = ui.zoom_widget_PF_rect->y1 + panel_button_size;
-    button_tone = ui.is_zoom_widget_PF_hovered ? active_buttone_tone
-                                               : normal_button_tone;
+    button_tone = (ui.is_zoom_widget_PF_hovered || d.zoom_level == PageFit)
+                  ? active_buttone_tone : normal_button_tone;
     cairo_set_source_rgba(cr,
                           button_tone, button_tone, button_tone, 1);
     cairo_rectangle(cr,
@@ -2977,11 +3001,16 @@ draw_reading_mode(cairo_t *cr)
                           normal_button_tone, normal_button_tone, normal_button_tone, 0.8);
     cairo_fill(cr);
     double progress = ((double)(d.cur_page_num + 1) / d.num_pages);  
+    Rect reading_progress_data_rect;
+    reading_progress_data_rect.x1 = reading_progress_rect.x1 + 2;                    
+    reading_progress_data_rect.y1 = reading_progress_rect.y1 + 2;
+    reading_progress_data_rect.x2 = reading_progress_data_rect.x1 + rect_width(&reading_progress_rect) - 4;
+    reading_progress_data_rect.y2 = reading_progress_data_rect.y1 + panel_button_size - 4;
     cairo_rectangle(cr,
-                    reading_progress_rect.x1 + 2,
-                    reading_progress_rect.y1 + 2,
-                    progress * (rect_width(&reading_progress_rect) - 4),
-                    panel_button_size - 4);
+                    reading_progress_data_rect.x1,
+                    reading_progress_data_rect.y1,
+                    progress * rect_width(&reading_progress_data_rect),
+                    rect_height(&reading_progress_data_rect));
     cairo_set_source_rgba(cr,
                           active_buttone_tone, active_buttone_tone, active_buttone_tone, 0.8);
     cairo_fill(cr);    
@@ -2991,7 +3020,7 @@ draw_reading_mode(cairo_t *cr)
         char *last_page_label = (last_page_meta->page_label->label)
          ? g_strdup_printf("%s", last_page_meta->page_label->label)
          : g_strdup_printf("%d", d.num_pages);
-        char *reading_progress_text = g_strdup_printf("<span font='sans 8' foreground='black'><b>%s of %s</b></span>",
+        char *reading_progress_text = g_strdup_printf("<span font='sans 10' foreground='black'>%s of %s</span>",
                                                       meta->page_label->label,
                                                       last_page_label);
         draw_text(cr,
@@ -3001,6 +3030,28 @@ draw_reading_mode(cairo_t *cr)
                   &reading_progress_rect);
         g_free(last_page_label);
         g_free(reading_progress_text);
+    }
+    /* find results profile */
+    if(d.find_details.find_results){
+        double data_box_width = rect_width(&reading_progress_data_rect),
+               data_box_height = rect_height(&reading_progress_data_rect);
+        double page_bar_width = (data_box_width / d.num_pages);
+        for(int i = 0; i < d.num_pages; i++){
+            PageMeta *meta = g_ptr_array_index(d.metae,
+                                               i);
+            if(!meta->find_results){
+                continue;
+            }
+            cairo_rectangle(cr,
+                            reading_progress_data_rect.x1 + i * page_bar_width,
+                            reading_progress_data_rect.y2,
+                            page_bar_width,
+                            -(double)g_list_length(meta->find_results) / d.find_details.max_results *
+                            data_box_height);            
+        }
+        cairo_set_source_rgba(cr,
+                              giants_orange_r, giants_orange_g, giants_orange_b, 0.8);
+        cairo_fill(cr);
     }
 
 }
@@ -4024,7 +4075,7 @@ tooltip_event_callback(GtkWidget  *widget,
             list_p = list_p->next;
         }
         if(tooltip_cv){
-            unit_tip = g_strdup_printf("<span font='sans 10' >Unit</span>: %s",
+            unit_tip = g_strdup_printf("<span font='sans 10' >~= %s</span>",
                                        tooltip_cv->value_str);
         }
         /* find results */
@@ -4055,7 +4106,7 @@ tooltip_event_callback(GtkWidget  *widget,
         }
         if(list_p){
             FindResult *fr = list_p->data;
-            find_tip = g_strdup_printf("<span font='sans 10' >Find</span>: %s",
+            find_tip = g_strdup_printf("<span font='sans 10' >%s</span>",
                                        fr->tip);
         }
         /* links */
@@ -4192,8 +4243,8 @@ on_app_quit(GtkWidget *widget,
 void
 init_app(GtkApplication *app)
 {
-    const double widget_width = 640,
-                 widget_height = 480;
+    const double widget_width = 800,
+                 widget_height = 600;
     ui.main_window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(ui.main_window), "readaratus");
     gtk_window_set_default_size(GTK_WINDOW(ui.main_window),

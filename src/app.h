@@ -103,6 +103,8 @@ struct FindDetails
 {
     GList *find_results;
     GList *selected_p;
+    int max_results;
+    int max_results_page_num;
 };
 
 struct GoBack

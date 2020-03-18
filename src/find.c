@@ -552,7 +552,7 @@ find_text(const GPtrArray *metae,
         if((cleaned_term[i] != '\\') && (i < strlen(cleaned_term) - 1)){             
             dashed_term = g_string_append(dashed_term,
                                           cleaned_term[i] != '-' ? "(-\\R+)?"
-                                                                 : "\\R+");
+                                                                 : "(\\R+)?");
         }
     }   
     GRegex *whitespace_regex = g_regex_new(

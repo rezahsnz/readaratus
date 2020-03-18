@@ -72,9 +72,6 @@ void
 converted_unit_free(ConvertedUnit *cv);
 
 void
-dump_converted_unit(const ConvertedUnit *cv);
-
-void
 convert_units(const char *text,
 			  GList      **converted_units);
 
