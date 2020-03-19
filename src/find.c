@@ -497,26 +497,24 @@ find_text(const GPtrArray *metae,
     if(!metae || !find_term || strlen(find_term) == 0 ||
        start_page < 0 || pages_length <= 0)
     {
-        g_print("invalid find request\n");
         return NULL;
     }   
     GError *err = NULL;  
-    GRegex *nl_regex = g_regex_new(
-        "\\R+",
-        0,
-        0,
+    GRegex *nl_ws_regex = g_regex_new(
+        "\\s+|\\R+",
+        0, 0,
         &err);
-    if(!nl_regex){
-        g_print("nl_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
+    if(!nl_ws_regex){
+        g_print("nl_ws_regex error.\ndomain:  %d, \ncode: %d, \nmessage: %s\n",
                 err->domain, err->code, err->message);
     } 
-    char *no_nl_term = g_regex_replace(nl_regex,
-                                       find_term,
-                                       -1,
-                                       0,
-                                       " ",
-                                       0,
-                                       NULL);
+    char *no_nl_ws_term = g_regex_replace(nl_ws_regex,
+                                          find_term,
+                                          -1,
+                                          0,
+                                          " ",
+                                          0,
+                                          NULL);
     GRegex *trimmer_regex = g_regex_new(
         "^\\s+|\\s+$",
         0,
@@ -527,19 +525,18 @@ find_text(const GPtrArray *metae,
                 err->domain, err->code, err->message);
     }
     char *cleaned_term = g_regex_replace(trimmer_regex,
-                                         no_nl_term,
+                                         no_nl_ws_term,
                                          -1,
                                          0,
                                          "",
                                          0,
                                          NULL);
-    g_free(no_nl_term);
-    g_regex_unref(nl_regex);
+    g_free(no_nl_ws_term);
+    g_regex_unref(nl_ws_regex);
     g_regex_unref(trimmer_regex);
     gboolean term_has_whitespace = g_regex_match_simple("\\s",
                                                         cleaned_term,
-                                                        0,
-                                                        0);
+                                                        0, 0);
     char *temp = cleaned_term;
     cleaned_term = g_regex_escape_string(temp,
                                          -1);
@@ -549,12 +546,22 @@ find_text(const GPtrArray *metae,
     for(int i = 0; i < strlen(cleaned_term); i++){
         dashed_term = g_string_append_c(dashed_term,
                                         cleaned_term[i]);
-        if((cleaned_term[i] != '\\') && (i < strlen(cleaned_term) - 1)){             
-            dashed_term = g_string_append(dashed_term,
-                                          cleaned_term[i] != '-' ? "(-\\R+)?"
-                                                                 : "(\\R+)?");
+        if((i == strlen(cleaned_term) - 1) ||
+           (cleaned_term[i] == '\\'))         
+        {
+            continue;
         }
-    }   
+        if(cleaned_term[i] != ' '){
+            if(cleaned_term[i] != '-' && cleaned_term[i + 1] != '-'){
+                dashed_term = g_string_append(dashed_term,
+                                              "-?");
+            }
+            if(cleaned_term[i + 1] != ' ' && cleaned_term[i + 1] != '-'){
+                dashed_term = g_string_append(dashed_term,
+                                              "\\R*");
+            }
+        }        
+    }       
     GRegex *whitespace_regex = g_regex_new(
         "\\s+",
         0,
