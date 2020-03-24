@@ -365,6 +365,8 @@ scroll_with_pixels(double dx,
 static void
 load_text_layouts(PageMeta *meta)
 {
+    meta->num_layouts = 0;
+    meta->physical_text_layouts = NULL;
     PopplerRectangle *phys_layouts = NULL;
     poppler_page_get_text_layout(meta->page,
                                  &phys_layouts,
@@ -1011,21 +1013,19 @@ load_metae(void)
         PageMeta *meta = g_malloc(sizeof(PageMeta));
         meta->page_num = page_num;
         meta->page = poppler_document_get_page(d.doc,
-                                               page_num);               
+                                               page_num); 
         poppler_page_get_size(meta->page,
                               &meta->page_width,
                               &meta->page_height);
         meta->aspect_ratio = meta->page_height / meta->page_width;
-        meta->text = poppler_page_get_text(meta->page);
-        meta->num_layouts = 0;
-        meta->physical_text_layouts = NULL;
+        meta->text = poppler_page_get_text(meta->page);        
         load_text_layouts(meta);
-        meta->links = NULL;         
+        meta->links = NULL;
         meta->converted_units = NULL;
         meta->figures = NULL;
         meta->referenced_figures = NULL;
         meta->active_referenced_figure = NULL;
-        meta->find_results = NULL;     
+        meta->find_results = NULL;
         g_ptr_array_add(d.metae,
                         meta);
     }
@@ -1088,7 +1088,9 @@ fix_page_labels(void)
                 rect->y2 = meta->page_height - rect->y2;
                 double center_y = rect_center_y(rect);
                 double dist = MIN(center_y, meta->page_height - center_y);
-                if(dist < min_dist){
+                if((dist < min_dist) &&
+                   (dist < 0.35 * meta->page_height))
+                {
                     page_label_str = match;
                     min_dist = dist;
                 }
@@ -1915,9 +1917,6 @@ teleport(const char *term)
                   0, 0);
         g_free(object_name);
         return;
-    }
-    else{
-        g_print("'%s' is not pagenum: %d\n", object_name, page_num);
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
     GError *err = NULL;
