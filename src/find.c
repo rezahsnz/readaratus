@@ -134,18 +134,20 @@ match_found_rects(GList  *list_p,
 }
 
 static void
-find_rects_of_text(PageMeta *meta,
-                   GRegex   *regex,
-                   gboolean  is_dualpage,
-                   gboolean  is_whole_words,
-                   GList   **find_results)
+find_rects_of_text(PopplerDocument *document,
+                   PageMeta        *meta,
+                   GRegex          *regex,
+                   gboolean         is_dualpage,
+                   gboolean         is_whole_words,
+                   GList          **find_results)
 {
     int poppler_find_options = 0;
     poppler_find_options |= is_whole_words ? POPPLER_FIND_WHOLE_WORDS_ONLY : 0;
     if(poppler_find_options == 0){
         poppler_find_options = POPPLER_FIND_DEFAULT;
     }
-
+    PopplerPage *page = poppler_document_get_page(document,
+                                                  meta->page_num);
     GMatchInfo *match_info = NULL;
     g_regex_match(regex,
                   meta->text,
@@ -166,7 +168,7 @@ find_rects_of_text(PageMeta *meta,
         if(!is_flattend){
             char *flattened_match = g_strjoinv(" ",
                                                tokens);
-            GList *pop_rects = poppler_page_find_text_with_options(meta->page,
+            GList *pop_rects = poppler_page_find_text_with_options(page,
                                                                    flattened_match,
                                                                    (PopplerFindFlags)poppler_find_options);
             GList *rect_p = pop_rects;
@@ -246,7 +248,7 @@ find_rects_of_text(PageMeta *meta,
         char **token_p = tokens;
         while(*token_p){
             GList *rects = NULL;
-            GList *pop_rects = poppler_page_find_text_with_options(meta->page,
+            GList *pop_rects = poppler_page_find_text_with_options(page,
                                                                    *token_p,
                                                                    (PopplerFindFlags)poppler_find_options);
             if(!pop_rects){                   
@@ -484,10 +486,12 @@ find_rects_of_text(PageMeta *meta,
         }
         g_list_free(rem_list);
     }
+    g_object_unref(page);
 }
 
 GList *
-find_text(const GPtrArray *metae,
+find_text(PopplerDocument *document,
+          const GPtrArray *metae,
           const char      *find_term,
           int              start_page,
           int              pages_length,
@@ -616,7 +620,8 @@ find_text(const GPtrArray *metae,
         */  
         if(strlen(meta->text) >= term_len){
             GList *results = NULL;
-            find_rects_of_text(meta,
+            find_rects_of_text(document,
+                               meta,
                                multiline_regex,
                                FALSE,
                                is_whole_words,
@@ -715,7 +720,8 @@ find_text(const GPtrArray *metae,
             GRegex *prefix_regex = g_list_nth_data(multipage_prefix_regex_list,
                                                    i);
             GList *find_results_prefix = NULL;       
-            find_rects_of_text(meta_prefix,
+            find_rects_of_text(document,
+                               meta_prefix,
                                prefix_regex,
                                TRUE,
                                is_whole_words,
@@ -743,7 +749,8 @@ find_text(const GPtrArray *metae,
                 GRegex *postfix_regex = g_list_nth_data(multipage_postfix_regex_list,
                                                         i);
                 GList *find_results_postfix = NULL;
-                find_rects_of_text(meta_postfix,
+                find_rects_of_text(document,
+                                   meta_postfix,
                                    postfix_regex,
                                    TRUE,
                                    is_whole_words,

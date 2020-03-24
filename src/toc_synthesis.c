@@ -41,9 +41,10 @@ typedef struct
 }ContentsPage;
 
 static void
-align_unprocessed_lines(GPtrArray *page_meta_list,
-                        GHashTable *unprocessed_line_hash,
-                        GList     **aligned_line_list)
+align_unprocessed_lines(PopplerDocument *document,
+                        GPtrArray       *page_meta_list,
+                        GHashTable      *unprocessed_line_hash,
+                        GList          **aligned_line_list)
 {
     /* 
        align incorrectly separated lines of text by simple geograhical
@@ -57,6 +58,8 @@ align_unprocessed_lines(GPtrArray *page_meta_list,
         int page_num = GPOINTER_TO_INT(key);
         PageMeta *meta = g_ptr_array_index(page_meta_list,
                                            page_num);
+        PopplerPage *page = poppler_document_get_page(document,
+                                                      page_num);
         const double ALIGNMENT_THRESHOLD = meta->mean_line_height * 0.25;
         GList *unprocessed_line_list = value;
         GList *already_matched_list = NULL;
@@ -71,8 +74,8 @@ align_unprocessed_lines(GPtrArray *page_meta_list,
             GList *matched_line_list = NULL,
                   *matched_rect_list = NULL;
             char *line = list_p->data;            
-            GList *rect_list = NULL;
-            GList *pop_list = poppler_page_find_text_with_options(meta->page,
+            GList *rect_list = NULL;            
+            GList *pop_list = poppler_page_find_text_with_options(page,
                                                                   line,
                                                                   POPPLER_FIND_WHOLE_WORDS_ONLY);
             GList *pop_p = pop_list;
@@ -95,9 +98,10 @@ align_unprocessed_lines(GPtrArray *page_meta_list,
                 }
                 char *line_other = list_other_p->data;
                 GList *rect_other_list = NULL;
-                GList *pop_other_list = poppler_page_find_text_with_options(meta->page,
+                GList *pop_other_list = poppler_page_find_text_with_options(page,
                                                                             line_other,
                                                                             POPPLER_FIND_WHOLE_WORDS_ONLY);
+
                 GList *pop_other_p = pop_other_list;
                 while(pop_other_p){
                     Rect *rect_other = rect_from_poppler_rectangle(pop_other_p->data);
@@ -140,6 +144,7 @@ align_unprocessed_lines(GPtrArray *page_meta_list,
             }
             g_list_free_full(rect_list,
                              (GDestroyNotify)rect_free);
+            g_object_unref(page);
             if(matched_line_list){
                 already_matched_list = g_list_concat(already_matched_list,
                                                      matched_line_list);
@@ -391,8 +396,9 @@ treeize_toc_list(GHashTable *page_label_num_hash,
 }
 
 static void
-find_toc_target_position(GPtrArray *page_meta_list,
-                         TOCItem *toc_item)
+find_toc_target_position(PopplerDocument *document,
+                         GPtrArray       *page_meta_list,
+                         TOCItem         *toc_item)
 {
     /*
       find position of a toc item's heading in its page.      
@@ -402,7 +408,8 @@ find_toc_target_position(GPtrArray *page_meta_list,
     }
     GList *list_p = toc_item->children;
     while(list_p){
-        find_toc_target_position(page_meta_list,
+        find_toc_target_position(document,
+                                 page_meta_list,
                                  list_p->data);
         list_p = list_p->next;
     }
@@ -411,12 +418,13 @@ find_toc_target_position(GPtrArray *page_meta_list,
     }
     /* 1: look up title */
     GList *find_results = NULL;
-        find_results = find_text(page_meta_list,
-                                toc_item->title,
-                                toc_item->page_num,
-                                1,
-                                FALSE,
-                                TRUE);
+    find_results = find_text(document,
+                             page_meta_list,
+                             toc_item->title,
+                             toc_item->page_num,
+                             1,
+                             FALSE,
+                             TRUE);
     find_results = g_list_sort(find_results,
                                compare_find_results);
     double target_y1 = -1.0,
@@ -482,7 +490,8 @@ find_toc_target_position(GPtrArray *page_meta_list,
         }
         g_free(needle_without_label);
         find_results = NULL;
-        find_results = find_text(page_meta_list,
+        find_results = find_text(document,
+                                 page_meta_list,
                                  needle,
                                  toc_item->page_num,
                                  1,
@@ -514,7 +523,7 @@ find_toc_target_position(GPtrArray *page_meta_list,
 }
 
 void
-toc_create_from_contents_pages(PopplerDocument *doc,
+toc_create_from_contents_pages(PopplerDocument *document,
                                GPtrArray       *page_meta_list,
                                GHashTable      *page_label_num_hash,
                                TOCItem        **head_item)
@@ -642,7 +651,8 @@ toc_create_from_contents_pages(PopplerDocument *doc,
             contents_p = contents_p->next;
         }
         GList *aligned_line_list = NULL;
-        align_unprocessed_lines(page_meta_list,
+        align_unprocessed_lines(document,
+                                page_meta_list,
                                 unprocessed_line_hash,
                                 &aligned_line_list);
         GList *unprocessed_line_list = g_hash_table_get_values(unprocessed_line_hash);                                   
@@ -816,8 +826,9 @@ toc_create_from_contents_pages(PopplerDocument *doc,
     (*head_item)->depth = 0;  
     toc_fix_depth(*head_item);
     toc_fix_sibling_links(*head_item);
-    (*head_item)->length = poppler_document_get_n_pages(doc);
+    (*head_item)->length = poppler_document_get_n_pages(document);
     toc_calc_length(*head_item);
-    find_toc_target_position(page_meta_list,
+    find_toc_target_position(document,
+                             page_meta_list,
                              *head_item);
 }

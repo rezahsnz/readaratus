@@ -51,7 +51,8 @@ int
 compare_find_results(const void *a,
                      const void *b);
 GList *
-find_text(const GPtrArray *metae,
+find_text(PopplerDocument *document,
+          const GPtrArray *metae,
           const char *find_term,
           int         start_page,
           int         pages_length,

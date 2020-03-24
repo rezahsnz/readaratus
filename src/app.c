@@ -102,10 +102,13 @@ render_page (PageMeta *meta,
                 height / meta->page_height);    
     cairo_set_source_rgb(cr,
                          1, 1, 1);
-    cairo_paint(cr);     
-    poppler_page_render(meta->page,
+    cairo_paint(cr);
+    PopplerPage *page = poppler_document_get_page(d.doc,
+                                                  meta->page_num);     
+    poppler_page_render(page,
                         cr);
     cairo_destroy(cr);
+    g_object_unref(page);
     return image;
 }
 
@@ -363,12 +366,13 @@ scroll_with_pixels(double dx,
 }
 
 static void
-load_text_layouts(PageMeta *meta)
+load_text_layouts(PageMeta    *meta,
+                  PopplerPage *page)
 {
     meta->num_layouts = 0;
     meta->physical_text_layouts = NULL;
     PopplerRectangle *phys_layouts = NULL;
-    poppler_page_get_text_layout(meta->page,
+    poppler_page_get_text_layout(page,
                                  &phys_layouts,
                                  &meta->num_layouts);
     meta->physical_text_layouts = g_ptr_array_sized_new(meta->num_layouts);
@@ -392,7 +396,10 @@ load_links()
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
         meta->links = NULL;
-        GList *link_mappings = poppler_page_get_link_mapping(meta->page);
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num);
+        GList *link_mappings = poppler_page_get_link_mapping(page);
+        g_object_unref(page);
         GList *link_p = link_mappings;
         while(link_p){
             PopplerLinkMapping *link_mapping = link_p->data;
@@ -464,7 +471,8 @@ load_units(void)
         GList *list_p = meta->converted_units;
         while(list_p){
             ConvertedUnit *cv = list_p->data; 
-            GList *find_results = find_text(d.metae,
+            GList *find_results = find_text(d.doc,
+                                            d.metae,
                                             cv->whole_match,
                                             page_num,
                                             1,
@@ -675,8 +683,11 @@ create_image_for_figure(PageMeta *meta,
       out of it.
     */
     const double MIN_PAGE_WIDTH_PX = 640;
-    cairo_surface_t *first_image_surface = poppler_page_get_image(meta->page,
+    PopplerPage *page = poppler_document_get_page(d.doc,
+                                                  meta->page_num);
+    cairo_surface_t *first_image_surface = poppler_page_get_image(page,
                                                                   figure->image_id);
+    g_object_unref(page);
     double page_render_width = cairo_image_surface_get_width(first_image_surface) * 
         (meta->page_width / rect_width(figure->image_physical_layout));
     page_render_width = MAX(MIN_PAGE_WIDTH_PX, page_render_width);
@@ -719,7 +730,9 @@ load_figures(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
-        GList *image_mappings = poppler_page_get_image_mapping(meta->page);
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num);
+        GList *image_mappings = poppler_page_get_image_mapping(page);
         /* tiny image = noise */
         GList *image_mappings_p = image_mappings;
         while(image_mappings_p){
@@ -737,11 +750,13 @@ load_figures(void)
             image_mappings_p = next;
         }
         if(!image_mappings){
+            g_object_unref(page);
             continue;
         }
         GList *fig_list = extract_figure_captions(meta->text);
         if(!fig_list){
             poppler_page_free_image_mapping(image_mappings);
+            g_object_unref(page);
             continue;
         }
         /* merge images that have non-null inresections */
@@ -805,7 +820,7 @@ load_figures(void)
                 new_figure->page_num = page_num;
                 new_figure->image_id = img->image_id;
                 new_figure->image_physical_layout = rect_from_poppler_rectangle(&img->area); 
-                GList *results = poppler_page_find_text(meta->page,
+                GList *results = poppler_page_find_text(page,
                                                         new_figure->whole_match);
                 GList *results_p = results;            
                 while(results_p){
@@ -833,6 +848,7 @@ load_figures(void)
         g_list_free_full(fig_list,
                          (GDestroyNotify)figure_free);
         poppler_page_free_image_mapping(image_mappings);
+        g_object_unref(page);
     }
     GList *figure_p = NULL;
     if(labels_are_exclusive){  
@@ -981,7 +997,8 @@ resolve_referenced_figures(void)
                     char *needle = g_strdup_printf("%s %s",
                                                    ref_figure->label,
                                                    ref_figure->id);
-                    ref_figure->find_results = find_text(d.metae,
+                    ref_figure->find_results = find_text(d.doc,
+                                                         d.metae,
                                                          needle,
                                                          page_num,
                                                          1,
@@ -1012,14 +1029,16 @@ load_metae(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_malloc(sizeof(PageMeta));
         meta->page_num = page_num;
-        meta->page = poppler_document_get_page(d.doc,
-                                               page_num); 
-        poppler_page_get_size(meta->page,
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num); 
+        poppler_page_get_size(page,
                               &meta->page_width,
                               &meta->page_height);
         meta->aspect_ratio = meta->page_height / meta->page_width;
-        meta->text = poppler_page_get_text(meta->page);        
-        load_text_layouts(meta);
+        meta->text = poppler_page_get_text(page);        
+        load_text_layouts(meta,
+                          page);
+        g_object_unref(page);
         meta->links = NULL;
         meta->converted_units = NULL;
         meta->figures = NULL;
@@ -1064,6 +1083,8 @@ fix_page_labels(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num);
         meta->page_label = g_malloc(sizeof(PageLabel));
         meta->page_label->label = NULL;
         meta->page_label->physical_layout = NULL;
@@ -1078,7 +1099,7 @@ fix_page_labels(void)
         while(g_match_info_matches(match_info)){
             char *match = g_match_info_fetch(match_info,
                                              0);
-            GList *pop_list = poppler_page_find_text_with_options(meta->page,
+            GList *pop_list = poppler_page_find_text_with_options(page,
                                                                   match,
                                                                   POPPLER_FIND_WHOLE_WORDS_ONLY);
             GList *list_p = pop_list;
@@ -1107,6 +1128,7 @@ fix_page_labels(void)
                               NULL);
         }
         g_match_info_free(match_info); 
+        g_object_unref(page);
         if(!page_label_str){
             continue;
         }                
@@ -1411,7 +1433,6 @@ destroy_document(void)
             list_p = list_p->next;
         }
         g_list_free(meta->referenced_figures);
-        g_object_unref(meta->page);     
         if(meta->page_label){
             g_free(meta->page_label->label);        
             rect_free(meta->page_label->physical_layout);
@@ -2143,7 +2164,8 @@ on_find_request_received(GtkWidget *sender,
     if(d.metae){
         destroy_find_results();
         gtk_widget_queue_draw(ui.vellum);     
-        d.find_details.find_results = find_text(d.metae,
+        d.find_details.find_results = find_text(d.doc,
+                                                d.metae,
                                                 find_request->text,
                                                 0, d.num_pages,
                                                 find_request->is_dualpage_checked,
