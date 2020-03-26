@@ -4223,7 +4223,7 @@ init_app(GtkApplication *app)
     ui.app_info_text = 
         "<span font='sans 12' foreground='black'><b>readaratus</b>\n"
         "A dynamic book reading system for computers\n\n"
-        "Version 2.0\n"
+        "Version 2.1\n"
         "Copyright © 2020 <i>readaratus team</i>\n</span>"
         "<span font='sans 12' foreground='blue'>www.readaratus.ir</span>\n\n\n\n"
         "<span font='sans 10' foreground='black'>This program is provided without any warranty and is licensed under the terms of\n"
