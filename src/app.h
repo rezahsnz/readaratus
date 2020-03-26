@@ -52,6 +52,13 @@ struct Ui
     Rect *app_info_area_rect;
     const char *app_info_text;
     /* reading mode widgets */
+    /* panel */
+    Rect *panel_rect;
+    gboolean is_panel_hovered;
+    /* dynamic objects */
+    gboolean is_find_result_hovered;
+    gboolean is_link_hovered;
+    gboolean is_unit_hovered;
     /* page navigation */
     gboolean is_next_prev_page_hovered;
     /* zoom widget */
@@ -100,6 +107,8 @@ struct FindDetails
 {
     GList *find_results;
     GList *selected_p;
+    int max_results;
+    int max_results_page_num;
 };
 
 struct GoBack

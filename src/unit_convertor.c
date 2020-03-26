@@ -126,13 +126,6 @@ converted_unit_free(ConvertedUnit *cv)
     g_free(cv);
 }
 
-void
-dump_converted_unit(const ConvertedUnit *cv)
-{
-    g_print("'%s' = '%s'\n",
-            cv->whole_match, cv->value_str);
-}
-
 static double
 get_multiplier (const char *multiplier_str)
 {

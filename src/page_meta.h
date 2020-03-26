@@ -41,7 +41,6 @@ typedef struct
 
 typedef struct
 {
-	PopplerPage *page;
 	char *text;
 
     int page_num;

@@ -27,7 +27,7 @@ string_index_in_list(GList      *list,
                      gboolean    is_case_sensitive);
 
 void
-toc_create_from_contents_pages(PopplerDocument *doc,
+toc_create_from_contents_pages(PopplerDocument *document,
                                GPtrArray       *page_meta_list,
                                GHashTable      *page_label_num_hash,
                                TOCItem        **head_item);

@@ -49,7 +49,7 @@ static const double gotham_green_r = 0.0,
 static const double giants_orange_r = 0.9960,
                     giants_orange_g = 0.3529,
                     giants_orange_b = 0.1137;
-/* darkblue: #FE5A1D, (254, 90, 29) */
+/* darkblue: #, (254, 90, 29) */
 static const double blue_r = 0,
                     blue_g = 0,
                     blue_b = 1;
@@ -61,10 +61,8 @@ static const double toc_navigation_panel_height = 72;
 static void 
 pose_page_widgets(void)
 {
-    int widget_width = gtk_widget_get_allocated_width(ui.vellum);
-    int widget_height = gtk_widget_get_allocated_height(ui.vellum);
-    int padding = 8;
-    int button_size = 47;
+    double widget_width = gtk_widget_get_allocated_width(ui.vellum);
+    double widget_height = gtk_widget_get_allocated_height(ui.vellum);
     /* start mode widgets */
     ui.import_area_rect->x1 = 0;
     ui.import_area_rect->y1 = 0;
@@ -79,51 +77,15 @@ pose_page_widgets(void)
     ui.app_info_area_rect->x2 = ui.app_info_area_rect->x1 + widget_width / 2;
     ui.app_info_area_rect->y2 = ui.app_info_area_rect->y1 + widget_height * 0.75;
     /* reading mode widgets */
-    /* page fit */
-    ui.zoom_widget_PF_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_PF_rect->y1 = padding;
-    ui.zoom_widget_PF_rect->x2 = ui.zoom_widget_PF_rect->x1 + button_size;
-    ui.zoom_widget_PF_rect->y2 = ui.zoom_widget_PF_rect->y1 + button_size;
-    /* width fit */
-    ui.zoom_widget_WF_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_WF_rect->y1 = button_size + 2 * padding;
-    ui.zoom_widget_WF_rect->x2 = ui.zoom_widget_WF_rect->x1 + button_size;
-    ui.zoom_widget_WF_rect->y2 = ui.zoom_widget_WF_rect->y1 + button_size;
-    /* zoom in */
-    ui.zoom_widget_IN_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_IN_rect->y1 = 2 * button_size + 3 * padding;
-    ui.zoom_widget_IN_rect->x2 = ui.zoom_widget_IN_rect->x1 + button_size;
-    ui.zoom_widget_IN_rect->y2 = ui.zoom_widget_IN_rect->y1 + button_size;
-    /* zoom out */
-    ui.zoom_widget_OUT_rect->x1 = widget_width - button_size - padding;
-    ui.zoom_widget_OUT_rect->y1 = 3 * button_size + 4 * padding;
-    ui.zoom_widget_OUT_rect->x2 = ui.zoom_widget_OUT_rect->x1 + button_size;
-    ui.zoom_widget_OUT_rect->y2 = ui.zoom_widget_OUT_rect->y1 + button_size;
-    /* prev page */
-    ui.prev_page_button_rect->x1 = padding;
-    ui.prev_page_button_rect->y1 = widget_height / 2 - button_size / 2;
-    ui.prev_page_button_rect->x2 = ui.prev_page_button_rect->x1 + button_size;
-    ui.prev_page_button_rect->y2 = ui.prev_page_button_rect->y1 + button_size;
-    /* next page */
-    ui.next_page_button_rect->x1 = widget_width - button_size - padding;
-    ui.next_page_button_rect->y1 = widget_height / 2 - button_size / 2;
-    ui.next_page_button_rect->x2 = ui.next_page_button_rect->x1 + button_size;
-    ui.next_page_button_rect->y2 = ui.next_page_button_rect->y1 + button_size;
-    /* teleport launcher */
-    ui.teleport_launcher_rect->x1 = padding;
-    ui.teleport_launcher_rect->y1 = widget_height - button_size - padding;
-    ui.teleport_launcher_rect->x2 = ui.teleport_launcher_rect->x1 + button_size;
-    ui.teleport_launcher_rect->y2 = ui.teleport_launcher_rect->y1 + button_size;
-    /* find text launcher */
-    ui.find_text_launcher_rect->x1 = ui.teleport_launcher_rect->x2 + padding;
-    ui.find_text_launcher_rect->y1 = widget_height - button_size - padding;
-    ui.find_text_launcher_rect->x2 = ui.find_text_launcher_rect->x1 + button_size;
-    ui.find_text_launcher_rect->y2 = ui.find_text_launcher_rect->y1 + button_size;
-    /* TOC launcher */
-    ui.toc_launcher_rect->x1 = ui.find_text_launcher_rect->x2 + padding;
-    ui.toc_launcher_rect->y1 = widget_height - button_size - padding;
-    ui.toc_launcher_rect->x2 = ui.toc_launcher_rect->x1 + button_size;
-    ui.toc_launcher_rect->y2 = ui.toc_launcher_rect->y1 + button_size;    
+    const double panel_button_size = widget_width > 800 ? 47 : 33,
+                 panel_margin = widget_width > 800 ? 12 : 8;
+    const double panel_width = 2 * panel_margin + 
+        2 * (panel_button_size + panel_margin) + 7 * panel_button_size;
+    const double panel_height = 2 * panel_margin + 2.75 * panel_button_size;
+    ui.panel_rect->x1 = widget_width / 2 - panel_width / 2;
+    ui.panel_rect->y1 = widget_height - panel_height - panel_margin;
+    ui.panel_rect->x2 = ui.panel_rect->x1 + panel_width;
+    ui.panel_rect->y2 = ui.panel_rect->y1 + panel_height;
 }
 
 static cairo_surface_t *
@@ -140,10 +102,13 @@ render_page (PageMeta *meta,
                 height / meta->page_height);    
     cairo_set_source_rgb(cr,
                          1, 1, 1);
-    cairo_paint(cr);     
-    poppler_page_render(meta->page,
+    cairo_paint(cr);
+    PopplerPage *page = poppler_document_get_page(d.doc,
+                                                  meta->page_num);     
+    poppler_page_render(page,
                         cr);
     cairo_destroy(cr);
+    g_object_unref(page);
     return image;
 }
 
@@ -195,15 +160,15 @@ scale_page (enum ZoomLevel zl,
         d.image_origin_x = widget_width / 2.0 - image_width / 2.0;    
     }
     else{
-        double max_scrollable_width = image_width - widget_width;
-        d.image_origin_x = -MIN(progress_x * image_width, fabs(max_scrollable_width));
+        double hidden_width = image_width - widget_width;
+        d.image_origin_x = -MIN(fabs(progress_x * image_width), hidden_width / 2.0);
     }
     if(image_height <= widget_height){
         d.image_origin_y = widget_height / 2.0 - image_height / 2.0;
     }
     else{
-        double max_scrollable_height = image_height - widget_height;        
-        d.image_origin_y = -MIN(fabs(progress_y * image_height), fabs(max_scrollable_height));
+        double hidden_height = image_height - widget_height;        
+        d.image_origin_y = -MIN(fabs(progress_y * image_height), hidden_height);
     }
     cairo_surface_destroy(d.image);
     d.image = render_page(meta,
@@ -275,6 +240,8 @@ goto_page (int page_num,
 static void
 next_page(void)
 {
+    d.preserved_progress_x = 0.0;
+    d.preserved_progress_y = 0.0;
     goto_page(d.cur_page_num + 1,
               0, 0);
 }
@@ -282,8 +249,10 @@ next_page(void)
 static void
 previous_page(void)
 {
+    d.preserved_progress_x = 0.0;
+    d.preserved_progress_y = 0.0;
     goto_page(d.cur_page_num - 1,
-              0, 0);
+              0, 0.999);
 }
 
 static void
@@ -333,43 +302,54 @@ scroll_with_pixels(double dx,
         double image_height = cairo_image_surface_get_height(d.image);
         double hidden_portion_width = image_width - widget_width;
         double hidden_portion_height = image_height - widget_height;
+        double my_dx = dx,
+               my_dy = dy; 
         switch(d.zoom_level){
             case PageFit:
-                dx = dy = 0;
+                my_dx = my_dy = 0;
                 break;
             case WidthFit:
                 /* vertical only */
-                dx = 0;
-                if(dy + d.image_origin_y > 0){
-                    dy = 0;
+                my_dx = 0;
+                if(my_dy + d.image_origin_y > 0){
+                    my_dy = 0;
                 }
-                if(abs(dy + d.image_origin_y) > hidden_portion_height){
-                    dy = 0;
+                if(abs(my_dy + d.image_origin_y) > hidden_portion_height){
+                    my_dy = 0;
                 }
                 break;
             default:
                 /* vertical */
-                if(dy + d.image_origin_y > 0){
-                    dy = 0;
+                if(my_dy + d.image_origin_y > 0){
+                    my_dy = 0;
                 }
-                if(abs(dy + d.image_origin_y) > hidden_portion_height){
-                    dy = 0;
+                if(abs(my_dy + d.image_origin_y) > hidden_portion_height){
+                    my_dy = 0;
                 }
                 /* horizontal */
-                if(dx + d.image_origin_x > 0){
-                    dx = 0;
+                if(my_dx + d.image_origin_x > 0){
+                    my_dx = 0;
                 }
-                if(abs(dx + d.image_origin_x) > hidden_portion_width){
-                    dx = 0;
+                if(abs(my_dx + d.image_origin_x) > hidden_portion_width){
+                    my_dx = 0;
                 }
                 break;
         }
-        if(dx != 0.0 || dy != 0.0){
-            d.image_origin_x += dx;
-            d.image_origin_y += dy;
+        if(my_dx != 0.0 || my_dy != 0.0){
+            d.image_origin_x += my_dx;
+            d.image_origin_y += my_dy;
             d.preserved_progress_x = (d.image_origin_x) / cairo_image_surface_get_width(d.image);
             d.preserved_progress_y = (d.image_origin_y) / cairo_image_surface_get_height(d.image);
             gtk_widget_queue_draw(ui.vellum);
+        }
+        else{
+            /* semi continous mode */
+            if(dy > 0){
+                previous_page();
+            }
+            else if(dy < 0){
+                next_page();
+            }
         }
     }
     else if(ui.app_mode == TOCMode){
@@ -386,10 +366,13 @@ scroll_with_pixels(double dx,
 }
 
 static void
-load_text_layouts(PageMeta *meta)
+load_text_layouts(PageMeta    *meta,
+                  PopplerPage *page)
 {
+    meta->num_layouts = 0;
+    meta->physical_text_layouts = NULL;
     PopplerRectangle *phys_layouts = NULL;
-    poppler_page_get_text_layout(meta->page,
+    poppler_page_get_text_layout(page,
                                  &phys_layouts,
                                  &meta->num_layouts);
     meta->physical_text_layouts = g_ptr_array_sized_new(meta->num_layouts);
@@ -413,7 +396,10 @@ load_links()
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
         meta->links = NULL;
-        GList *link_mappings = poppler_page_get_link_mapping(meta->page);
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num);
+        GList *link_mappings = poppler_page_get_link_mapping(page);
+        g_object_unref(page);
         GList *link_p = link_mappings;
         while(link_p){
             PopplerLinkMapping *link_mapping = link_p->data;
@@ -485,7 +471,8 @@ load_units(void)
         GList *list_p = meta->converted_units;
         while(list_p){
             ConvertedUnit *cv = list_p->data; 
-            GList *find_results = find_text(d.metae,
+            GList *find_results = find_text(d.doc,
+                                            d.metae,
                                             cv->whole_match,
                                             page_num,
                                             1,
@@ -687,20 +674,25 @@ merge_images(GList *image_mappings,
 }
 
 static cairo_surface_t *
-stich_merged_images (PageMeta *meta,
-                     Figure   *figure)
-{    
-    /* crop the rectangle that holds the image(s) from the rendered
-       page (to the maximum size obtained from the resolution of the surface)  */
-    double aspect_ratio = meta->page_height / meta->page_width;
-    /* @ smalles image might be better for scaling */    
-    cairo_surface_t *surface = poppler_page_get_image(meta->page,
-                                                      figure->image_id);
-    double surface_width = cairo_image_surface_get_width(surface);
-    cairo_surface_destroy(surface);
-    double image_physical_width = rect_width(figure->image_physical_layout);
-    double page_render_width = surface_width * (meta->page_width / image_physical_width);
-    double page_render_height = page_render_width * aspect_ratio;
+create_image_for_figure(PageMeta *meta,
+                        Figure   *figure)
+{
+    /*
+      create the image that figure represents.
+      render the target page to a suitable resolution and then crop the image
+      out of it.
+    */
+    const double MIN_PAGE_WIDTH_PX = 640;
+    PopplerPage *page = poppler_document_get_page(d.doc,
+                                                  meta->page_num);
+    cairo_surface_t *first_image_surface = poppler_page_get_image(page,
+                                                                  figure->image_id);
+    g_object_unref(page);
+    double page_render_width = cairo_image_surface_get_width(first_image_surface) * 
+        (meta->page_width / rect_width(figure->image_physical_layout));
+    page_render_width = MAX(MIN_PAGE_WIDTH_PX, page_render_width);
+    double page_render_height = meta->aspect_ratio * page_render_width;
+    cairo_surface_destroy(first_image_surface);
     cairo_surface_t *rendered_page = render_page(meta,
                                                  page_render_width,
                                                  page_render_height);
@@ -730,27 +722,26 @@ stich_merged_images (PageMeta *meta,
 }
 
 static void
-load_figures (int start_page)
+load_figures(void)
 {        
     gboolean labels_are_exclusive = FALSE,
              ids_are_complex = FALSE;
     GList *all_figures = NULL;
     for(int page_num = 0; page_num < d.num_pages; page_num++){
-        if(page_num < start_page){
-            continue;
-        }
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
-        GList *image_mappings = poppler_page_get_image_mapping(meta->page);
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num);
+        GList *image_mappings = poppler_page_get_image_mapping(page);
         /* tiny image = noise */
         GList *image_mappings_p = image_mappings;
         while(image_mappings_p){
             GList *next = image_mappings_p->next;
             PopplerImageMapping *img = image_mappings_p->data;
-            double img_width = img->area.x2 - img->area.x1,
-                   img_height = img->area.y2 - img->area.y1;
-            if(fabs(img_width) < meta->mean_line_height ||
-               fabs(img_height) < meta->mean_line_height)
+            double img_width = fabs(img->area.x2 - img->area.x1),
+                   img_height = fabs(img->area.y2 - img->area.y1);
+            if(img_width < meta->mean_line_height ||
+               img_height < meta->mean_line_height)
             {
                 image_mappings = g_list_remove_link(image_mappings,
                                                     image_mappings_p);
@@ -759,20 +750,15 @@ load_figures (int start_page)
             image_mappings_p = next;
         }
         if(!image_mappings){
+            g_object_unref(page);
             continue;
         }
         GList *fig_list = extract_figure_captions(meta->text);
         if(!fig_list){
             poppler_page_free_image_mapping(image_mappings);
+            g_object_unref(page);
             continue;
         }
-        // g_print("page %d:\n", page_num);
-        // GList *tmp_p = fig_list;
-        // while(tmp_p){
-        //     Figure *fig = tmp_p->data;
-        //     g_print("'%s'\n", fig->whole_match);
-        //     tmp_p = tmp_p->next;
-        // }
         /* merge images that have non-null inresections */
         if(image_mappings->next){
             GList *image_mappings_p = image_mappings;
@@ -834,7 +820,7 @@ load_figures (int start_page)
                 new_figure->page_num = page_num;
                 new_figure->image_id = img->image_id;
                 new_figure->image_physical_layout = rect_from_poppler_rectangle(&img->area); 
-                GList *results = poppler_page_find_text(meta->page,
+                GList *results = poppler_page_find_text(page,
                                                         new_figure->whole_match);
                 GList *results_p = results;            
                 while(results_p){
@@ -859,13 +845,10 @@ load_figures (int start_page)
             }                      
             image_mappings_p = image_mappings_p->next;        
         }        
-        GList *list_p = fig_list;
-        while(list_p){
-            figure_free(list_p->data);
-            list_p = list_p->next;
-        }  
-        g_list_free(fig_list);
+        g_list_free_full(fig_list,
+                         (GDestroyNotify)figure_free);
         poppler_page_free_image_mapping(image_mappings);
+        g_object_unref(page);
     }
     GList *figure_p = NULL;
     if(labels_are_exclusive){  
@@ -943,8 +926,8 @@ load_figures (int start_page)
             PageMeta *meta = g_ptr_array_index(d.metae,
                                                       closest_figure->page_num);
             closest_figure->caption_physical_layout = closest_caption->physical_layout;
-            closest_figure->image = stich_merged_images(meta,
-                                                        closest_figure);
+            closest_figure->image = create_image_for_figure(meta,
+                                                            closest_figure);
             g_hash_table_insert(meta->figures,
                                 closest_figure->id,
                                 closest_figure);
@@ -954,24 +937,11 @@ load_figures (int start_page)
                                              closest_figure->image_id));
             g_hash_table_add(processed_figures_hash_table,
                              closest_figure);
-            /*g_print("%d-%d: %s\n", 
-                    closest_figure->page_num, closest_figure->image_id, closest_figure->whole_match); */
-        }     
-        else{
-            /*figure_p = figure_list_p->data;
-            Figure *figure = figure_p->data;
-            g_print("%d-%d: ?\n", 
-                    figure->page_num, figure->image_id);*/
         } 
         figure_list_p = figure_list_p->next;
     }
-    GList *keys = g_hash_table_get_keys(processed_images_hash_table);
-    GList *keys_p = keys;
-    while(keys_p){
-        g_free((char *)keys_p->data);
-        keys_p = keys_p->next;
-    }
-    g_list_free(keys);
+    g_list_free_full(g_hash_table_get_keys(processed_images_hash_table),
+                     (GDestroyNotify)g_free);
     g_hash_table_unref(processed_images_hash_table);
     
     figure_list_p = figures_per_image;
@@ -994,14 +964,11 @@ load_figures (int start_page)
 }
 
 static void
-resolve_referenced_figures (int start_page)
+resolve_referenced_figures(void)
 {
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
-        if(page_num < start_page){
-            continue;
-        }
         GList *ref_figures = extract_figure_references(meta->text);
         GList *list_p = ref_figures;
         while(list_p){
@@ -1015,7 +982,7 @@ resolve_referenced_figures (int start_page)
                 list_p = list_p->next;
                 continue;
             }                    
-            for(int ref_page_num = start_page; ref_page_num < d.num_pages; ref_page_num++){
+            for(int ref_page_num = 0; ref_page_num < d.num_pages; ref_page_num++){
                 if(ref_page_num == page_num){
                     continue;
                 }
@@ -1027,12 +994,11 @@ resolve_referenced_figures (int start_page)
                 Figure *reference = g_hash_table_lookup(ref_meta->figures,
                                                         ref_figure->id);
                 if(reference){
-                    /*g_print("'%s'(p%d) is located on page %d\n",
-                            figure->whole_match, figure->page_num, ref_figure->page_num);*/
                     char *needle = g_strdup_printf("%s %s",
                                                    ref_figure->label,
                                                    ref_figure->id);
-                    ref_figure->find_results = find_text(d.metae,
+                    ref_figure->find_results = find_text(d.doc,
+                                                         d.metae,
                                                          needle,
                                                          page_num,
                                                          1,
@@ -1046,8 +1012,6 @@ resolve_referenced_figures (int start_page)
                 }
             }
             if(!ref_figure->reference){
-                /*g_print("'%s'(p%d) is not referenced anywhere!\n",
-                        figure->whole_match, figure->page_num);*/
                 g_free(ref_figure->label);
                 g_free(ref_figure->id);
                 g_free(ref_figure);
@@ -1065,22 +1029,22 @@ load_metae(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_malloc(sizeof(PageMeta));
         meta->page_num = page_num;
-        meta->page = poppler_document_get_page(d.doc,
-                                               page_num);               
-        poppler_page_get_size(meta->page,
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num); 
+        poppler_page_get_size(page,
                               &meta->page_width,
                               &meta->page_height);
         meta->aspect_ratio = meta->page_height / meta->page_width;
-        meta->text = poppler_page_get_text(meta->page);
-        meta->num_layouts = 0;
-        meta->physical_text_layouts = NULL;
-        load_text_layouts(meta);
-        meta->links = NULL;         
+        meta->text = poppler_page_get_text(page);        
+        load_text_layouts(meta,
+                          page);
+        g_object_unref(page);
+        meta->links = NULL;
         meta->converted_units = NULL;
         meta->figures = NULL;
         meta->referenced_figures = NULL;
         meta->active_referenced_figure = NULL;
-        meta->find_results = NULL;     
+        meta->find_results = NULL;
         g_ptr_array_add(d.metae,
                         meta);
     }
@@ -1119,6 +1083,8 @@ fix_page_labels(void)
     for(int page_num = 0; page_num < d.num_pages; page_num++){
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
+        PopplerPage *page = poppler_document_get_page(d.doc,
+                                                      page_num);
         meta->page_label = g_malloc(sizeof(PageLabel));
         meta->page_label->label = NULL;
         meta->page_label->physical_layout = NULL;
@@ -1133,7 +1099,7 @@ fix_page_labels(void)
         while(g_match_info_matches(match_info)){
             char *match = g_match_info_fetch(match_info,
                                              0);
-            GList *pop_list = poppler_page_find_text_with_options(meta->page,
+            GList *pop_list = poppler_page_find_text_with_options(page,
                                                                   match,
                                                                   POPPLER_FIND_WHOLE_WORDS_ONLY);
             GList *list_p = pop_list;
@@ -1143,7 +1109,9 @@ fix_page_labels(void)
                 rect->y2 = meta->page_height - rect->y2;
                 double center_y = rect_center_y(rect);
                 double dist = MIN(center_y, meta->page_height - center_y);
-                if(dist < min_dist){
+                if((dist < min_dist) &&
+                   (dist < 0.35 * meta->page_height))
+                {
                     page_label_str = match;
                     min_dist = dist;
                 }
@@ -1160,6 +1128,7 @@ fix_page_labels(void)
                               NULL);
         }
         g_match_info_free(match_info); 
+        g_object_unref(page);
         if(!page_label_str){
             continue;
         }                
@@ -1207,6 +1176,9 @@ fix_page_labels(void)
             g_free(meta->page_label->label);
             meta->page_label->label = g_strdup_printf("%d",
                                                       page_num + 1);
+            g_hash_table_insert(d.page_label_num_hash,
+                                meta->page_label->label,
+                                GINT_TO_POINTER(page_num));
         }
         g_print("Majority of the pages provide no labels, using page index instead.\n");
         return;
@@ -1312,7 +1284,6 @@ zero_document(void)
     d.preserved_progress_y = 0.0;
     d.num_pages = -1;
     d.cur_page_num = -1;
-    /*d.zoom_level = PageFit;*/
     d.toc.head_item = NULL;
     d.toc.labels = NULL;
     d.toc.flattened_items = NULL;
@@ -1321,7 +1292,22 @@ zero_document(void)
     d.toc.origin_x = 0;
     d.toc.origin_y = 0;
     d.find_details.selected_p = NULL;
-    d.find_details.find_results = NULL;    
+    d.find_details.find_results = NULL;
+    d.find_details.max_results = 0;
+    d.find_details.max_results_page_num = -1;
+    ui.is_link_hovered = FALSE;
+    ui.is_find_result_hovered = FALSE;
+    ui.is_unit_hovered = FALSE;
+    ui.is_panel_hovered = FALSE;
+    ui.is_zoom_widget_PF_hovered = FALSE;
+    ui.is_zoom_widget_WF_hovered = FALSE;
+    ui.is_zoom_widget_IN_hovered = FALSE;
+    ui.is_zoom_widget_OUT_hovered = FALSE;
+    ui.is_prev_page_button_hovered = FALSE;
+    ui.is_next_page_button_hovered = FALSE;
+    ui.is_teleport_launcher_hovered = FALSE;
+    ui.is_find_text_launcher_hovered = FALSE;
+    ui.is_toc_launcher_hovered = FALSE;
 }
 
 static void
@@ -1459,7 +1445,6 @@ destroy_document(void)
             list_p = list_p->next;
         }
         g_list_free(meta->referenced_figures);
-        g_object_unref(meta->page);     
         if(meta->page_label){
             g_free(meta->page_label->label);        
             rect_free(meta->page_label->physical_layout);
@@ -1508,7 +1493,7 @@ import_pdf(void)
                                                      GTK_RESPONSE_ACCEPT,
                                                      NULL);
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
-                                        "/home/reza/Desktop");
+                                        "/home/reza/book");
     GtkFileFilter *file_filter = gtk_file_filter_new();
     gtk_file_filter_add_pattern(file_filter,
                                 "*.pdf");
@@ -1562,6 +1547,11 @@ import_pdf(void)
                                                 subject ? subject : "N/A",
                                                 format ? format : "N/A",
                                                 num_pages_str);
+    char *window_title = g_strdup_printf("readaratus - '%s'", 
+                                         title ? title : fn);
+    gtk_window_set_title(GTK_WINDOW(ui.main_window),
+                         window_title);
+    g_free(window_title);
     g_free(title);
     g_free(author);
     g_free(subject);
@@ -1578,10 +1568,9 @@ import_pdf(void)
     load_toc();
     g_print("Converting units...\n");
     load_units();
-    int main_contents_start_page = 0;
     g_print("Loading figures...\n");
-    load_figures(main_contents_start_page);
-    resolve_referenced_figures(main_contents_start_page);
+    load_figures();
+    resolve_referenced_figures();
     setup_text_completions();
     g_print("Document is ready.\n");    
     ui.app_mode = ReadingMode;
@@ -1626,10 +1615,6 @@ activate_link (Link *link)
         d.preserved_progress_y = progress_y;
         goto_page(link->target_page_num,
                   progress_x, progress_y);
-    }
-    else{
-        g_print("link: %s\n",
-                link->tip);
     }
 }
 
@@ -2173,6 +2158,15 @@ destroy_find_results(void)
     g_list_free(d.find_details.find_results);
     d.find_details.selected_p = NULL;
     d.find_details.find_results = NULL;
+    d.find_details.max_results = 0;
+    d.find_details.max_results_page_num = -1;
+}
+
+static void
+show_panel(void)
+{
+    ui.is_panel_hovered = TRUE;
+    gtk_widget_queue_draw(ui.vellum);
 }
 
 static void
@@ -2183,7 +2177,8 @@ on_find_request_received(GtkWidget *sender,
     if(d.metae){
         destroy_find_results();
         gtk_widget_queue_draw(ui.vellum);     
-        d.find_details.find_results = find_text(d.metae,
+        d.find_details.find_results = find_text(d.doc,
+                                                d.metae,
                                                 find_request->text,
                                                 0, d.num_pages,
                                                 find_request->is_dualpage_checked,
@@ -2217,9 +2212,22 @@ on_find_request_received(GtkWidget *sender,
             result_p = result_p->next;
             i++;
         }
+        for(i = 0; i < d.num_pages; i++){
+            PageMeta *meta = g_ptr_array_index(d.metae,
+                                               i);
+            if(!meta->find_results){
+                continue;
+            }
+            int num_results = g_list_length(meta->find_results);
+            if(num_results > d.find_details.max_results){
+                d.find_details.max_results = num_results;
+                d.find_details.max_results_page_num = i;
+            }
+        }
         find_next();
     }    
     g_free(find_request);
+    show_panel();
 }
 
 static void
@@ -2439,8 +2447,6 @@ draw_reading_mode(cairo_t *cr)
     cairo_fill(cr);
     /* links */ 
     GList *list_p = meta->links;   
-    cairo_set_source_rgb(cr,
-                         blue_r, blue_g, blue_b);
     while(list_p){
         Link *link = list_p->data;
         Rect img_rect = map_physical_rect_to_image(link->physical_layout,
@@ -2453,21 +2459,11 @@ draw_reading_mode(cairo_t *cr)
         cairo_rectangle(cr,
                         img_rect.x1, img_rect.y1,
                         rect_width(&img_rect), rect_height(&img_rect));
-        if(link->is_hovered){
-            cairo_set_dash(cr,
-                           dashed_style,
-                           num_dashes,
-                           0);
-        }
-        else{
-            cairo_set_dash(cr,
-                           NULL, 0, 0);
-        }
-        cairo_stroke(cr);
+        cairo_set_source_rgba(cr,
+                              blue_r, blue_g, blue_b, link->is_hovered ? 0.4 : 0.1);
+        cairo_fill(cr);
         list_p = list_p->next;
     }
-    cairo_set_dash(cr,
-                   NULL, 0, 0);        
     /* converted units */
     list_p = meta->converted_units;
     while(list_p){
@@ -2484,68 +2480,18 @@ draw_reading_mode(cairo_t *cr)
                                                        image_height,
                                                        d.image_origin_x,
                                                        d.image_origin_y);
-                cairo_move_to(cr,
-                              rect.x1, rect.y1);
-                cairo_line_to(cr,
-                              rect.x2, rect.y1);
-                if(g_list_last(fr->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                else{
-                    cairo_move_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                cairo_line_to(cr,
-                              rect.x1, rect.y2);
-                if(g_list_first(fr->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x1, rect.y1);
-                }
+                cairo_rectangle(cr,
+                                rect.x1, rect.y1,
+                                rect_width(&rect), rect_height(&rect));
                 rect_p = rect_p->next;
             }
             result_p = result_p->next;
         }
         list_p = list_p->next;
     }
-    cairo_set_source_rgb(cr,
-                         gotham_green_r, gotham_green_g, gotham_green_b);
-    cairo_stroke(cr);
-    /* figures */
-    // if(meta->figures){
-    //     GHashTableIter iter;
-    //     gpointer key, value;
-    //     g_hash_table_iter_init (&iter, meta->figures);
-    //     while(g_hash_table_iter_next(&iter, &key, &value)){        
-    //         Figure *fig = value;
-    //         Rect image_rect = map_physical_rect_to_image(fig->image_physical_layout,
-    //                                                 meta->page_width,
-    //                                                 meta->page_height,
-    //                                                 image_width,
-    //                                                 image_height,
-    //                                                 d.image_origin_x,
-    //                                                 d.image_origin_y); 
-    //         cairo_rectangle(cr,
-    //                         image_rect.x1,
-    //                         image_rect.y1,
-    //                         image_rect.x2 - image_rect.x1,
-    //                         image_rect.y2 - image_rect.y1);      
-    //         Rect caption_rect = map_physical_rect_to_image(fig->caption_physical_layout,
-    //                                                   meta->page_width,
-    //                                                   meta->page_height,
-    //                                                   image_width,
-    //                                                   image_height,
-    //                                                   d.image_origin_x,
-    //                                                   d.image_origin_y);
-    //         cairo_rectangle(cr,
-    //                         caption_rect.x1,
-    //                         caption_rect.y1,
-    //                         caption_rect.x2 - caption_rect.x1,
-    //                         caption_rect.y2 - caption_rect.y1);
-    //         cairo_set_source_rgb(cr, 1, 0, 0);
-    //         cairo_stroke(cr);
-    //     }   
-    // }
+    cairo_set_source_rgba(cr,
+                         gotham_green_r, gotham_green_g, gotham_green_b, 0.2);
+    cairo_fill(cr);
     /* referenced figures */
     list_p = meta->referenced_figures;
     while(list_p){
@@ -2562,35 +2508,18 @@ draw_reading_mode(cairo_t *cr)
                                                        image_height,
                                                        d.image_origin_x,
                                                        d.image_origin_y);
-                cairo_move_to(cr,
-                              rect.x1, rect.y1);
-                cairo_line_to(cr,
-                              rect.x2, rect.y1);
-                if(g_list_last(find_result->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                else{
-                    cairo_move_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                cairo_line_to(cr,
-                              rect.x1, rect.y2);
-                if(g_list_first(find_result->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x1, rect.y1);
-                }
+                cairo_rectangle(cr,
+                                rect.x1, rect.y1,
+                                rect_width(&rect), rect_height(&rect));
                 rect_p = rect_p->next;
             }
             result_p = result_p->next;
         }
         list_p = list_p->next;
     }
-    if(meta->referenced_figures){
-        cairo_set_source_rgb(cr,
-                             1, 0, 1);
-        cairo_stroke(cr);
-    }
+    cairo_set_source_rgba(cr,
+                          1, 0, 1, 0.3);
+    cairo_fill(cr);
     /* find results */
     GList *result_p = meta->find_results;
     while(result_p){
@@ -2604,272 +2533,38 @@ draw_reading_mode(cairo_t *cr)
                                                    image_height,
                                                    d.image_origin_x,
                                                    d.image_origin_y);
-            cairo_move_to(cr,
-                          rect.x1, rect.y1);
-            cairo_line_to(cr,
-                          rect.x2, rect.y1);
-            if(g_list_last(find_result->physical_layouts) == rect_p &&
-               !find_result->page_postfix)
-            {
-                cairo_line_to(cr,
-                              rect.x2, rect.y2);
-            }
-            else{
-                cairo_move_to(cr,
-                              rect.x2, rect.y2);
-            }
-            cairo_line_to(cr,
-                          rect.x1, rect.y2);
-            if(g_list_first(find_result->physical_layouts) == rect_p &&
-               !find_result->page_prefix)
-            {
-                cairo_line_to(cr,
-                              rect.x1, rect.y1);
-            }
+            cairo_rectangle(cr,
+                            rect.x1, rect.y1,
+                            rect_width(&rect), rect_height(&rect));
             rect_p = rect_p->next;
-        }
+        }        
         if(d.find_details.selected_p && d.find_details.selected_p->data == find_result){
-           cairo_set_dash(cr,
-                          dashed_style,
-                          num_dashes,
-                          0);             
+            cairo_set_source_rgba(cr,
+                              giants_orange_r, giants_orange_g, giants_orange_b, 0.3);
         }
         else{
-            cairo_set_dash(cr,
-                           NULL, 0, 0);
+            cairo_set_source_rgba(cr,
+                              giants_orange_r, giants_orange_g, giants_orange_b, 0.2);
         }
-        cairo_set_source_rgb(cr,
-                             giants_orange_r, giants_orange_g, giants_orange_b);    
-        cairo_stroke(cr); 
+        cairo_fill(cr);
         result_p = result_p->next;
     }
-    cairo_set_dash(cr,
-                   NULL, 0, 0);
-    /* page widgets */
-    /* prev button */
-    if(d.cur_page_num > 0){
-        cairo_rectangle(cr,
-                        ui.prev_page_button_rect->x1, ui.prev_page_button_rect->y1,
-                        rect_width(ui.prev_page_button_rect), rect_height(ui.prev_page_button_rect));
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, ui.is_prev_page_button_hovered ? 0.9 : 0.2); /* light gray */
-        cairo_fill(cr);
-        draw_text(cr,
-                  "<span font='sans 16' foreground='#666666'><b>&#60;</b></span>",
-                  PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
-                  ui.prev_page_button_rect);    
-    }
-    /* next button */
-    if(d.cur_page_num < d.num_pages - 1){
-        cairo_rectangle(cr,
-                        ui.next_page_button_rect->x1, ui.next_page_button_rect->y1,
-                        rect_width(ui.next_page_button_rect), rect_height(ui.next_page_button_rect));
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, ui.is_next_page_button_hovered ? 0.9 : 0.2); /* light gray */
-        cairo_fill(cr);
-        draw_text(cr,
-                  "<span font='sans 16' foreground='#666666'><b>&#62;</b></span>",
-                  PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
-                  ui.next_page_button_rect);        
-    }
-    /* reading progress */
-    int padding = 10;
-    double text_width, text_height;
-    if(meta->page_label->label){
-        char *reading_progress_text = g_strdup_printf("<span font='sans 12' foreground='#222222'><i>%s</i> of %d</span>",
-                                                      meta->page_label->label,
-                                                      d.num_pages);
-        get_text_size(cr,
-                      reading_progress_text,
-                      &text_width, &text_height);
-        Rect reading_progress_rect;
-        reading_progress_rect.x1 = widget_width - text_width - 3 * padding;
-        reading_progress_rect.y1 = widget_height - text_height - 3 * padding;
-        reading_progress_rect.x2 = reading_progress_rect.x1 + text_width + 2 * padding;
-        reading_progress_rect.y2 = reading_progress_rect.y1 + text_height + 2 * padding;
-        cairo_rectangle(cr,
-                        reading_progress_rect.x1,
-                        reading_progress_rect.y1,
-                        rect_width(&reading_progress_rect),
-                        rect_height(&reading_progress_rect));
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-        cairo_fill(cr);
-        cairo_set_source_rgb(cr,
-                             0.1333, 0.1333, 0.1333);
-        double visual_progress_height = 8;    
-        cairo_rectangle(cr,
-                        reading_progress_rect.x1 + 1,
-                        reading_progress_rect.y2 - visual_progress_height,
-                        rect_width(&reading_progress_rect) - 2,
-                        visual_progress_height);
-        cairo_stroke(cr);
-        cairo_rectangle(cr,
-                        reading_progress_rect.x1 + 2,
-                        reading_progress_rect.y2 - visual_progress_height + 1,
-                        ((double)(d.cur_page_num + 1) / d.num_pages) * (rect_width(&reading_progress_rect) - 4),
-                        visual_progress_height - 2);
-        cairo_fill(cr);
-        draw_text(cr,
-                  reading_progress_text,
-                  PANGO_ALIGN_CENTER,
-                  PANGO_ALIGN_CENTER,
-                  &reading_progress_rect);
-        g_free(reading_progress_text);
-    }
-    /* zoom widget */
-    /* page fit */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_PF_rect->x1,
-                    ui.zoom_widget_PF_rect->y1,
-                    rect_width(ui.zoom_widget_PF_rect),
-                    rect_height(ui.zoom_widget_PF_rect));
-    if(ui.is_zoom_widget_PF_hovered || d.zoom_level == PageFit){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);                
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'>Page\n<b>F</b>it</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_PF_rect);
-    /* width fit */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_WF_rect->x1,
-                    ui.zoom_widget_WF_rect->y1,
-                    rect_width(ui.zoom_widget_WF_rect),
-                    rect_height(ui.zoom_widget_WF_rect));
-    if(ui.is_zoom_widget_WF_hovered  || d.zoom_level == WidthFit){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);                
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'>Fit to\n<b>w</b>idth</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_WF_rect);
-    /* zoom in */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_IN_rect->x1,
-                    ui.zoom_widget_IN_rect->y1,
-                    rect_width(ui.zoom_widget_IN_rect),
-                    rect_height(ui.zoom_widget_IN_rect));
-    if(ui.is_zoom_widget_IN_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 12' foreground='#222222'>+</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_IN_rect);
-    /* zoom out */
-    cairo_rectangle(cr,
-                    ui.zoom_widget_OUT_rect->x1,
-                    ui.zoom_widget_OUT_rect->y1,
-                    rect_width(ui.zoom_widget_OUT_rect),
-                    rect_height(ui.zoom_widget_OUT_rect));
-    if(ui.is_zoom_widget_OUT_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'>-</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.zoom_widget_OUT_rect);
-    /* launchers */
-    /* Teleport */
-    cairo_rectangle(cr,
-                    ui.teleport_launcher_rect->x1,
-                    ui.teleport_launcher_rect->y1,
-                    rect_width(ui.teleport_launcher_rect),
-                    rect_height(ui.teleport_launcher_rect));
-    if(ui.is_teleport_launcher_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'><b>T</b>ele\nport</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.teleport_launcher_rect);
-    /* find */
-    cairo_rectangle(cr,
-                    ui.find_text_launcher_rect->x1,
-                    ui.find_text_launcher_rect->y1,
-                    rect_width(ui.find_text_launcher_rect),
-                    rect_height(ui.find_text_launcher_rect));
-    if(ui.is_find_text_launcher_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'><u><b>F</b></u>ind</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.find_text_launcher_rect);
-    /* toc */
-    cairo_rectangle(cr,
-                    ui.toc_launcher_rect->x1,
-                    ui.toc_launcher_rect->y1,
-                    rect_width(ui.toc_launcher_rect),
-                    rect_height(ui.toc_launcher_rect));
-    if(ui.is_toc_launcher_hovered){
-        cairo_set_source_rgba(cr,
-                              cadet_gray_r, cadet_gray_g, cadet_gray_b, 0.8);
-    }
-    else{
-        cairo_set_source_rgba(cr,
-                              dark_gray_r, dark_gray_r, dark_gray_r, 0.8);
-    }
-    cairo_fill(cr);
-    draw_text(cr,
-              "<span font='sans 10' foreground='#222222'><u><b>T</b></u>OC</span>",
-              PANGO_ALIGN_CENTER,
-              PANGO_ALIGN_CENTER,
-              ui.toc_launcher_rect);
-    /* active referenced figure is overlaid on the page */
+    /* active referenced figure */
     if(meta->active_referenced_figure){        
         cairo_surface_t *ref_surface = meta->active_referenced_figure->reference->image;
         double ref_image_width = cairo_image_surface_get_width(ref_surface);
         double ref_image_height = cairo_image_surface_get_height(ref_surface);
         double ref_ar = ref_image_height / ref_image_width;
-        gboolean scaled = ref_image_width > widget_width || ref_image_height > widget_height;
-        if(scaled){
+        /* only 90% of total widget area can be occupied by a referenced figure */
+        double ref_widget_width = widget_width * 0.9,
+               ref_widget_height = widget_height * 0.9;
+        const double frame_padding = MIN(2, widget_width * 0.05);
+        gboolean scale_figure = ref_image_width > ref_widget_width ||
+                                ref_image_height > ref_widget_height;
+        if(scale_figure){
             double scaled_width, scaled_height;
-            double sx = widget_width < ref_image_width ? widget_width / ref_image_width : 1;
-            double sy = widget_height < ref_image_height ? widget_height / ref_image_height : 1;
+            double sx = ref_widget_width< ref_image_width ? ref_widget_width / ref_image_width : 1;
+            double sy = ref_widget_height < ref_image_height ? ref_widget_height / ref_image_height : 1;
             if(sy < 1){
                 scaled_height = ref_image_height * sy;
                 scaled_width =  scaled_height / ref_ar;
@@ -2895,73 +2590,413 @@ draw_reading_mode(cairo_t *cr)
             ref_image_width = cairo_image_surface_get_width(ref_surface);
             ref_image_height = cairo_image_surface_get_height(ref_surface);
         }
-        Rect caption_rect;
-        FindResult *find_result =  meta->active_referenced_figure->activated_find_result->data;
-        GList *rect_p = find_result->physical_layouts;
-        while(rect_p){
-            Rect rect = map_physical_rect_to_image(rect_p->data,
-                                                   meta->page_width,
-                                                   meta->page_height,
-                                                   image_width,
-                                                   image_height,
-                                                   d.image_origin_x,
-                                                   d.image_origin_y);
-            if(rect_p == g_list_first(find_result->physical_layouts)){
-                caption_rect = rect;
-            }
-            cairo_move_to(cr,
-                          rect.x1, rect.y1);
-            cairo_line_to(cr,
-                          rect.x2, rect.y1);
-            if(g_list_last(find_result->physical_layouts) == rect_p){
-                cairo_line_to(cr,
-                              rect.x2, rect.y2);
-            }
-            else{
-                cairo_move_to(cr,
-                              rect.x2, rect.y2);
-            }
-            cairo_line_to(cr,
-                          rect.x1, rect.y2);
-            if(g_list_first(find_result->physical_layouts) == rect_p){
-                cairo_line_to(cr,
-                              rect.x1, rect.y1);
-            }
-            rect_p = rect_p->next;
-        }
+        /* pose referenced figure */
+        GList *find_results = meta->active_referenced_figure->activated_find_result->data;
+        Rect caption_rect = map_physical_rect_to_image(g_list_first(find_results)->data,
+                                                       meta->page_width, meta->page_height,
+                                                       image_width, image_height,
+                                                       d.image_origin_x, d.image_origin_y);
         double caption_cx = rect_center_x(&caption_rect);
-        int padding = 1;
-        double frame_x1 = caption_cx - ref_image_width / 2 - padding;
-        double frame_y1 = caption_rect.y1 - ref_image_height - 2 * padding;
-        if(frame_y1 >= 0){
-            if(frame_x1 < 0){
-                frame_x1 = 0; 
-            }
-        }
-        else{
-            frame_y1 = 0;            
-            frame_x1 = caption_rect.x1 - ref_image_width - 2 * padding;
-            if(frame_x1 < 0){
-                frame_x1 = caption_rect.x2;
+        double frame_x1 = caption_cx - ref_image_width / 2 - 2 * frame_padding;
+        double frame_y1 = caption_rect.y1 - ref_image_height - 2 * frame_padding;
+        if(frame_y1 < 0){
+            frame_y1 = caption_rect.y2 + frame_padding;
+            if(frame_y1 + ref_image_height > (widget_height - frame_padding)){
+                frame_y1 = frame_padding;
             }
         }                
+        if(frame_x1 < 0 || (frame_x1 + ref_image_width > (widget_width - frame_padding))){
+            frame_x1 = frame_padding;
+        }
         cairo_rectangle(cr,
-                        frame_x1 + padding, frame_y1 + padding,
-                        ref_image_width + padding, ref_image_height + padding);  
+                        frame_x1 + frame_padding, frame_y1 + frame_padding,
+                        ref_image_width, ref_image_height);  
         cairo_set_source_rgb(cr,
                              0.5, 0.5, 0.5);
         cairo_stroke(cr);
         cairo_rectangle(cr,
-                        frame_x1 + padding, frame_y1 + padding,
+                        frame_x1 + frame_padding, frame_y1 + frame_padding,
                         ref_image_width, ref_image_height); 
         cairo_set_source_surface(cr,
                                  ref_surface,
-                                 frame_x1 + padding, frame_y1 + padding);
+                                 frame_x1 + frame_padding, frame_y1 + frame_padding);
         cairo_fill(cr);  
-        if(scaled){
+        if(scale_figure){
             cairo_surface_destroy(ref_surface);
         }      
     }
+    /* panel */
+    if(!ui.is_panel_hovered || meta->active_referenced_figure){
+        return;
+    }
+    const double panel_button_size = widget_width > 800 ? 47 : 33,
+                 panel_margin = widget_width > 800 ? 12 : 8;    
+    cairo_rectangle(cr,
+                    ui.panel_rect->x1, ui.panel_rect->y1,
+                    rect_width(ui.panel_rect), rect_height(ui.panel_rect));
+    cairo_set_source_rgba(cr,
+                          silver_r, silver_r, silver_r, 0.9);
+    cairo_fill(cr);
+    Rect tools_label_rect;
+    tools_label_rect.x1 = ui.panel_rect->x1 + panel_margin;
+    tools_label_rect.y1 = ui.panel_rect->y1 + panel_margin;
+    tools_label_rect.x2 = tools_label_rect.x1 + 3 * (panel_button_size + panel_margin) - panel_margin;
+    tools_label_rect.y2 = tools_label_rect.y1 + panel_button_size * 0.25;
+    draw_text(cr,
+              "<span font='sans 8' foreground='#222222'><b>Tools</b></span>",
+              PANGO_ALIGN_CENTER,
+              PANGO_ALIGN_CENTER,
+              &tools_label_rect);
+    const double active_buttone_tone = 0.2666,
+                 normal_button_tone = 0.4666;
+    /* teleport launcher */
+    ui.teleport_launcher_rect->x1 = ui.panel_rect->x1 + panel_margin;
+    ui.teleport_launcher_rect->y1 = tools_label_rect.y2 + panel_margin;
+    ui.teleport_launcher_rect->x2 = ui.teleport_launcher_rect->x1 + panel_button_size;
+    ui.teleport_launcher_rect->y2 = ui.teleport_launcher_rect->y1 + panel_button_size;
+    double button_tone = ui.is_teleport_launcher_hovered ? active_buttone_tone
+                                                         : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.1,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.6);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.1,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.7);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.40,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.8);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.6,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.8);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.9,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.7);
+    cairo_line_to(cr,
+                  ui.teleport_launcher_rect->x1 + panel_button_size * 0.9,
+                  ui.teleport_launcher_rect->y1 + panel_button_size * 0.6);
+    cairo_close_path(cr);    
+    cairo_fill(cr);
+    cairo_rectangle(cr,
+                    ui.teleport_launcher_rect->x1 + panel_button_size * 0.25,
+                    ui.teleport_launcher_rect->y1 + panel_button_size * 0.15,
+                    panel_button_size * 0.5, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.teleport_launcher_rect->x1 + panel_button_size * 0.325,
+                    ui.teleport_launcher_rect->y1 + panel_button_size * 0.35,
+                    panel_button_size * 0.35, panel_button_size * 0.075);
+    cairo_rectangle(cr,
+                    ui.teleport_launcher_rect->x1 + panel_button_size * 0.4,
+                    ui.teleport_launcher_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.2, panel_button_size * 0.035);
+    cairo_fill(cr);
+    /* find launcher */
+    ui.find_text_launcher_rect->x1 = ui.teleport_launcher_rect->x2 + panel_margin;
+    ui.find_text_launcher_rect->y1 = ui.teleport_launcher_rect->y1;
+    ui.find_text_launcher_rect->x2 = ui.find_text_launcher_rect->x1 + panel_button_size;
+    ui.find_text_launcher_rect->y2 = ui.find_text_launcher_rect->y1 + panel_button_size;
+    button_tone = ui.is_find_text_launcher_hovered ? active_buttone_tone
+                                                   : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_set_line_width(cr,
+                         2);
+    cairo_arc(cr,
+              ui.find_text_launcher_rect->x1 + panel_button_size * 0.25,
+              ui.find_text_launcher_rect->y1 + panel_button_size * 0.5,
+              panel_button_size * 0.15,
+              0, 2 * M_PI);
+    cairo_stroke(cr);
+    cairo_arc(cr,
+          ui.find_text_launcher_rect->x1 + panel_button_size * 0.75,
+          ui.find_text_launcher_rect->y1 + panel_button_size * 0.5,
+          panel_button_size * 0.15,
+          0, 2 * M_PI);
+    cairo_stroke(cr);
+    cairo_set_line_width(cr,
+                         1);
+    cairo_rectangle(cr,
+                    ui.find_text_launcher_rect->x1 + panel_button_size * 0.4,
+                    ui.find_text_launcher_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.2, panel_button_size * 0.05);
+    cairo_fill(cr);
+    cairo_move_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.1,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.03,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.53);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.9,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.find_text_launcher_rect->x1 + panel_button_size * 0.97,
+                  ui.find_text_launcher_rect->y1 + panel_button_size * 0.53);
+    cairo_stroke(cr);
+    /* toc launcher */
+    ui.toc_launcher_rect->x1 = ui.find_text_launcher_rect->x2 + panel_margin;
+    ui.toc_launcher_rect->y1 = ui.find_text_launcher_rect->y1;
+    ui.toc_launcher_rect->x2 = ui.toc_launcher_rect->x1 + panel_button_size;
+    ui.toc_launcher_rect->y2 = ui.toc_launcher_rect->y1 + panel_button_size;
+    button_tone = ui.is_toc_launcher_hovered ? active_buttone_tone
+                                             : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.1,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.1,
+                    panel_button_size * 0.25, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.3,
+                    panel_button_size * 0.25, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.6,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.5,
+                    panel_button_size * 0.25, panel_button_size * 0.15);
+    cairo_rectangle(cr,
+                    ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                    ui.toc_launcher_rect->y1 + panel_button_size * 0.7,
+                    panel_button_size * 0.25, panel_button_size * 0.15);    
+    cairo_fill(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.25);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.775);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.375);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.375);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.225,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.775);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.35,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.775);
+    cairo_stroke(cr);
+    cairo_move_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.475,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.45);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.475,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.575);
+    cairo_line_to(cr,
+                  ui.toc_launcher_rect->x1 + panel_button_size * 0.6,
+                  ui.toc_launcher_rect->y1 + panel_button_size * 0.575);
+    cairo_stroke(cr);
+    /* zoom */
+    Rect zoom_label_rect;
+    zoom_label_rect.x1 = ui.panel_rect->x2 - panel_margin - 4 * (panel_button_size + panel_margin) + panel_margin;
+    zoom_label_rect.y1 = ui.panel_rect->y1 + panel_margin;
+    zoom_label_rect.x2 = zoom_label_rect.x1 + 4 * (panel_button_size + panel_margin) - panel_margin;
+    zoom_label_rect.y2 = zoom_label_rect.y1 + panel_button_size * 0.25;
+    draw_text(cr,
+              "<span font='sans 8' foreground='#222222'><b>Zoom</b></span>",
+              PANGO_ALIGN_CENTER,
+              PANGO_ALIGN_CENTER,
+              &zoom_label_rect);
+    /* zoom out */
+    ui.zoom_widget_OUT_rect->x1 = ui.panel_rect->x2 - panel_button_size - panel_margin;
+    ui.zoom_widget_OUT_rect->y1 = zoom_label_rect.y2 + panel_margin;
+    ui.zoom_widget_OUT_rect->x2 = ui.zoom_widget_OUT_rect->x1 + panel_button_size;
+    ui.zoom_widget_OUT_rect->y2 = ui.zoom_widget_OUT_rect->y1 + panel_button_size;
+    button_tone = ui.is_zoom_widget_OUT_hovered ? active_buttone_tone
+                                                : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_OUT_rect->x1 + panel_button_size * 0.35,
+                    ui.zoom_widget_OUT_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.3, panel_button_size * 0.05);
+    cairo_fill(cr);
+    /* zoom in */
+    ui.zoom_widget_IN_rect->x1 = ui.zoom_widget_OUT_rect->x1 - panel_button_size - panel_margin;
+    ui.zoom_widget_IN_rect->y1 = ui.zoom_widget_OUT_rect->y1;
+    ui.zoom_widget_IN_rect->x2 = ui.zoom_widget_IN_rect->x1 + panel_button_size;
+    ui.zoom_widget_IN_rect->y2 = ui.zoom_widget_IN_rect->y1 + panel_button_size;
+    button_tone = ui.is_zoom_widget_IN_hovered ? active_buttone_tone
+                                                : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_IN_rect->x1 + panel_button_size * 0.35,
+                    ui.zoom_widget_IN_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.3, panel_button_size * 0.05);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_IN_rect->x1 + panel_button_size * 0.475,
+                    ui.zoom_widget_IN_rect->y1 + panel_button_size * 0.35,
+                    panel_button_size * 0.05, panel_button_size * 0.3);
+    cairo_fill(cr);
+    /* width fit */
+    ui.zoom_widget_WF_rect->x1 = ui.zoom_widget_IN_rect->x1 - panel_button_size - panel_margin;
+    ui.zoom_widget_WF_rect->y1 = ui.zoom_widget_IN_rect->y1;
+    ui.zoom_widget_WF_rect->x2 = ui.zoom_widget_WF_rect->x1 + panel_button_size;
+    ui.zoom_widget_WF_rect->y2 = ui.zoom_widget_WF_rect->y1 + panel_button_size;
+    button_tone = (ui.is_zoom_widget_WF_hovered || d.zoom_level == WidthFit)
+                  ? active_buttone_tone : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.3,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.35);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.1,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.3,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.65);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_move_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.7,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.35);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.9,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.7,
+                  ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.65);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_WF_rect->x1 + panel_button_size * 0.25,
+                    ui.zoom_widget_WF_rect->y1 + panel_button_size * 0.475,
+                    panel_button_size * 0.45, panel_button_size * 0.05);
+    cairo_fill(cr);
+    /* page fit */
+    ui.zoom_widget_PF_rect->x1 = ui.zoom_widget_WF_rect->x1 - panel_button_size - panel_margin;
+    ui.zoom_widget_PF_rect->y1 = ui.zoom_widget_WF_rect->y1;
+    ui.zoom_widget_PF_rect->x2 = ui.zoom_widget_PF_rect->x1 + panel_button_size;
+    ui.zoom_widget_PF_rect->y2 = ui.zoom_widget_PF_rect->y1 + panel_button_size;
+    button_tone = (ui.is_zoom_widget_PF_hovered || d.zoom_level == PageFit)
+                  ? active_buttone_tone : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_rectangle(cr,
+                    ui.zoom_widget_PF_rect->x1 + panel_button_size * 0.315,
+                    ui.zoom_widget_PF_rect->y1 + panel_button_size * 0.25,
+                    panel_button_size * 0.37, panel_button_size * 0.5);    
+    cairo_set_line_width(cr,
+                         2);
+    cairo_stroke(cr);       
+    cairo_set_line_width(cr,
+                         1);
+    /* prev page button */
+    ui.prev_page_button_rect->x1 = ui.panel_rect->x1 + panel_margin;
+    ui.prev_page_button_rect->y1 = ui.panel_rect->y2 - panel_button_size - panel_margin;
+    ui.prev_page_button_rect->x2 = ui.prev_page_button_rect->x1 + panel_button_size;
+    ui.prev_page_button_rect->y2 = ui.prev_page_button_rect->y1 + panel_button_size;
+    button_tone = ui.is_prev_page_button_hovered ? active_buttone_tone
+                                                 : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.prev_page_button_rect->x1 + panel_button_size * 0.85,
+                  ui.prev_page_button_rect->y1 + panel_button_size * 0.15);
+    cairo_line_to(cr,
+                  ui.prev_page_button_rect->x1 + panel_button_size * 0.15,
+                  ui.prev_page_button_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.prev_page_button_rect->x1 + panel_button_size * 0.85,
+                  ui.prev_page_button_rect->y1 + panel_button_size * 0.85);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    /* next page button */
+    ui.next_page_button_rect->x1 = ui.panel_rect->x2 - panel_button_size - panel_margin;
+    ui.next_page_button_rect->y1 = ui.prev_page_button_rect->y1;
+    ui.next_page_button_rect->x2 = ui.next_page_button_rect->x1 + panel_button_size;
+    ui.next_page_button_rect->y2 = ui.next_page_button_rect->y1 + panel_button_size;
+    button_tone = ui.is_next_page_button_hovered ? active_buttone_tone
+                                                 : normal_button_tone;
+    cairo_set_source_rgba(cr,
+                          button_tone, button_tone, button_tone, 1);
+    cairo_move_to(cr,
+                  ui.next_page_button_rect->x1 + panel_button_size * 0.15,
+                  ui.next_page_button_rect->y1 + panel_button_size * 0.15);
+    cairo_line_to(cr,
+                  ui.next_page_button_rect->x1 + panel_button_size * 0.85,
+                  ui.next_page_button_rect->y1 + panel_button_size * 0.5);
+    cairo_line_to(cr,
+                  ui.next_page_button_rect->x1 + panel_button_size * 0.15,
+                  ui.next_page_button_rect->y1 + panel_button_size * 0.85);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    /* reading progress */
+    Rect reading_progress_rect;
+    reading_progress_rect.x1 = ui.prev_page_button_rect->x2 + panel_margin;
+    reading_progress_rect.y1 = ui.prev_page_button_rect->y1;
+    reading_progress_rect.x2 = ui.next_page_button_rect->x1 - panel_margin;
+    reading_progress_rect.y2 = ui.next_page_button_rect->y2;
+    cairo_rectangle(cr,
+                    reading_progress_rect.x1,
+                    reading_progress_rect.y1,
+                    rect_width(&reading_progress_rect),
+                    rect_height(&reading_progress_rect));
+    cairo_set_source_rgba(cr,
+                          normal_button_tone, normal_button_tone, normal_button_tone, 0.8);
+    cairo_fill(cr);
+    double progress = ((double)(d.cur_page_num + 1) / d.num_pages);  
+    Rect reading_progress_data_rect;
+    reading_progress_data_rect.x1 = reading_progress_rect.x1 + 2;                    
+    reading_progress_data_rect.y1 = reading_progress_rect.y1 + 2;
+    reading_progress_data_rect.x2 = reading_progress_data_rect.x1 + rect_width(&reading_progress_rect) - 4;
+    reading_progress_data_rect.y2 = reading_progress_data_rect.y1 + panel_button_size - 4;
+    cairo_rectangle(cr,
+                    reading_progress_data_rect.x1,
+                    reading_progress_data_rect.y1,
+                    progress * rect_width(&reading_progress_data_rect),
+                    rect_height(&reading_progress_data_rect));
+    cairo_set_source_rgba(cr,
+                          active_buttone_tone, active_buttone_tone, active_buttone_tone, 0.8);
+    cairo_fill(cr);    
+    if(meta->page_label->label){
+        PageMeta *last_page_meta = g_ptr_array_index(d.metae,
+                                                     d.num_pages - 1);
+        char *last_page_label = (last_page_meta->page_label->label)
+         ? g_strdup_printf("%s", last_page_meta->page_label->label)
+         : g_strdup_printf("%d", d.num_pages);
+        char *reading_progress_text = g_strdup_printf("<span font='sans 10' foreground='black'>%s of %s</span>",
+                                                      meta->page_label->label,
+                                                      last_page_label);
+        draw_text(cr,
+                  reading_progress_text,
+                  PANGO_ALIGN_CENTER,
+                  PANGO_ALIGN_CENTER,
+                  &reading_progress_rect);
+        g_free(last_page_label);
+        g_free(reading_progress_text);
+    }
+    /* find results profile */
+    if(d.find_details.find_results){
+        double data_box_width = rect_width(&reading_progress_data_rect),
+               data_box_height = rect_height(&reading_progress_data_rect);
+        double page_bar_width = (data_box_width / d.num_pages);
+        for(int i = 0; i < d.num_pages; i++){
+            PageMeta *meta = g_ptr_array_index(d.metae,
+                                               i);
+            if(!meta->find_results){
+                continue;
+            }
+            cairo_rectangle(cr,
+                            reading_progress_data_rect.x1 + i * page_bar_width,
+                            reading_progress_data_rect.y2,
+                            page_bar_width,
+                            -(double)g_list_length(meta->find_results) / d.find_details.max_results *
+                            data_box_height);            
+        }
+        cairo_set_source_rgba(cr,
+                              giants_orange_r, giants_orange_g, giants_orange_b, 1);
+        cairo_fill(cr);
+    }
+
 }
 
 static void
@@ -3281,7 +3316,7 @@ draw_help_mode(cairo_t *cr)
     rect.x2 = widget_width - 2 * padding;
     rect.y2 = rect.y1 + 2 * padding;
     rect = draw_text(cr,
-                     "<span font='sans 10' foreground='#222'>When reading you might encounter colorful boxes, hover on to activate them.</span>",
+                     "<span font='sans 10' foreground='#222'>While reading you might encounter colorful shapes, just hover on them to see what happens.</span>",
                      PANGO_ALIGN_LEFT,
                      PANGO_ALIGN_LEFT,
                      &rect); 
@@ -3289,9 +3324,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,
-                         giants_orange_r, giants_orange_g, giants_orange_b);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         giants_orange_r, giants_orange_g, giants_orange_b, 0.3);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3305,9 +3340,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,
-                         gotham_green_r, gotham_green_g, gotham_green_b);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         gotham_green_r, gotham_green_g, gotham_green_b, 0.2);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3322,9 +3357,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,        
-                         1, 0, 1);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,        
+                         1, 0, 1, 0.3);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3339,9 +3374,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,
-                         0, 0, 1);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         0, 0, 1, 0.2);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3795,26 +3830,7 @@ motion_event_callback (GtkWidget      *widget,
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            d.cur_page_num);
         double image_width = cairo_image_surface_get_width(d.image);
-        double image_height = cairo_image_surface_get_height(d.image);
-        /* link hover */
-        gboolean is_link_hovered = FALSE;
-        GList *link_p = meta->links;
-        while(link_p){
-            Link *link = link_p->data;
-            Rect img_rect = map_physical_rect_to_image(link->physical_layout,
-                                                       meta->page_width,
-                                                       meta->page_height,
-                                                       image_width,
-                                                       image_height,
-                                                       d.image_origin_x,
-                                                       d.image_origin_y);
-            link->is_hovered = rect_contains_point(&img_rect,
-                                                   event->x, event->y);
-            if(!is_link_hovered){
-                is_link_hovered = link->is_hovered;
-            }
-            link_p = link_p->next;
-        }
+        double image_height = cairo_image_surface_get_height(d.image);       
         /* show referenced figure */
         meta->active_referenced_figure = NULL;
         GList *list_p = meta->referenced_figures;
@@ -3849,31 +3865,37 @@ motion_event_callback (GtkWidget      *widget,
                 result_p = result_p->next;
             }
             list_p = list_p->next;            
-        }
-        /* navigation widget hover */
-        ui.is_prev_page_button_hovered = d.cur_page_num > 0 &&
-                                         rect_contains_point(ui.prev_page_button_rect,
-                                                             event->x, event->y);
-        ui.is_next_page_button_hovered = d.cur_page_num < d.num_pages - 1 &&
-                                         rect_contains_point(ui.next_page_button_rect,
-                                                             event->x, event->y);
-        /* zoom widget */
-        ui.is_zoom_widget_PF_hovered = rect_contains_point(ui.zoom_widget_PF_rect,
-                                                           event->x, event->y);    
-        ui.is_zoom_widget_WF_hovered = rect_contains_point(ui.zoom_widget_WF_rect,
-                                                           event->x, event->y);
-        ui.is_zoom_widget_IN_hovered = rect_contains_point(ui.zoom_widget_IN_rect,
-                                                           event->x, event->y);
-        ui.is_zoom_widget_OUT_hovered = rect_contains_point(ui.zoom_widget_OUT_rect,
-                                                            event->x, event->y);
-        /* launchers */
-        ui.is_teleport_launcher_hovered = rect_contains_point(ui.teleport_launcher_rect,
-                                                              event->x, event->y);
-        ui.is_find_text_launcher_hovered = rect_contains_point(ui.find_text_launcher_rect,
+        }        
+        /* panel */
+        ui.is_panel_hovered = !ui.is_link_hovered && !ui.is_find_result_hovered &&
+                              !ui.is_unit_hovered &&!meta->active_referenced_figure &&
+                              rect_contains_point(ui.panel_rect,
+                                                  event->x, event->y);
+        if(ui.is_panel_hovered){
+            ui.is_prev_page_button_hovered = d.cur_page_num > 0 &&
+                                             rect_contains_point(ui.prev_page_button_rect,
+                                                                 event->x, event->y);
+            ui.is_next_page_button_hovered = d.cur_page_num < d.num_pages - 1 &&
+                                             rect_contains_point(ui.next_page_button_rect,
+                                                                 event->x, event->y);
+            /* zoom widget */
+            ui.is_zoom_widget_PF_hovered = rect_contains_point(ui.zoom_widget_PF_rect,
+                                                               event->x, event->y);    
+            ui.is_zoom_widget_WF_hovered = rect_contains_point(ui.zoom_widget_WF_rect,
                                                                event->x, event->y);
-        ui.is_toc_launcher_hovered = rect_contains_point(ui.toc_launcher_rect,
-                                                         event->x, event->y);
-        is_cursor_set = is_link_hovered ||
+            ui.is_zoom_widget_IN_hovered = rect_contains_point(ui.zoom_widget_IN_rect,
+                                                               event->x, event->y);
+            ui.is_zoom_widget_OUT_hovered = rect_contains_point(ui.zoom_widget_OUT_rect,
+                                                                event->x, event->y);
+            /* launchers */
+            ui.is_teleport_launcher_hovered = rect_contains_point(ui.teleport_launcher_rect,
+                                                                  event->x, event->y);
+            ui.is_find_text_launcher_hovered = rect_contains_point(ui.find_text_launcher_rect,
+                                                                   event->x, event->y);
+            ui.is_toc_launcher_hovered = rect_contains_point(ui.toc_launcher_rect,
+                                                             event->x, event->y);
+        }        
+        is_cursor_set = ui.is_link_hovered ||
                         ui.is_prev_page_button_hovered || ui.is_next_page_button_hovered ||
                         ui.is_zoom_widget_PF_hovered || ui.is_zoom_widget_WF_hovered || 
                         ui.is_zoom_widget_IN_hovered || ui.is_zoom_widget_OUT_hovered ||
@@ -3938,6 +3960,7 @@ tooltip_event_callback(GtkWidget  *widget,
         return FALSE; 
     }
     if(ui.app_mode == ReadingMode){
+        ui.is_unit_hovered = FALSE;    
         /* units */
         char *unit_tip = NULL;  
         PageMeta *meta = g_ptr_array_index(d.metae,
@@ -3979,10 +4002,12 @@ tooltip_event_callback(GtkWidget  *widget,
             list_p = list_p->next;
         }
         if(tooltip_cv){
-            unit_tip = g_strdup_printf("<span font='sans 10' >Unit</span>: %s",
+            unit_tip = g_strdup_printf("<span font='sans 10' >~= %s</span>",
                                        tooltip_cv->value_str);
+            ui.is_unit_hovered = TRUE;
         }
         /* find results */
+        ui.is_find_result_hovered = FALSE;    
         char *find_tip = NULL;
         list_p = meta->find_results;
         while(list_p){
@@ -4010,11 +4035,13 @@ tooltip_event_callback(GtkWidget  *widget,
         }
         if(list_p){
             FindResult *fr = list_p->data;
-            find_tip = g_strdup_printf("<span font='sans 10' >Find</span>: %s",
+            find_tip = g_strdup_printf("<span font='sans 10' >%s</span>",
                                        fr->tip);
+            ui.is_find_result_hovered = TRUE;
         }
         /* links */
         char *link_tip = NULL;
+        ui.is_link_hovered = FALSE;
         list_p = meta->links;
         while(list_p){
             Link *link = list_p->data;
@@ -4025,12 +4052,12 @@ tooltip_event_callback(GtkWidget  *widget,
                                                        image_height,
                                                        d.image_origin_x,
                                                        d.image_origin_y);
-            if(rect_contains_point(&img_rect,
-                                   x, y))
-            {
-                link_tip = g_strdup_printf("<span font='sans 10' >Link</span>: %s",
+            link->is_hovered = rect_contains_point(&img_rect,
+                                                   x, y);
+            if(link->is_hovered){
+                link_tip = g_strdup_printf("<span font='sans 10'>%s</span>",
                                            link->tip);
-                break;
+                ui.is_link_hovered = TRUE;
             }
             list_p = list_p->next;
         }
@@ -4072,7 +4099,7 @@ tooltip_event_callback(GtkWidget  *widget,
         else if(ui.is_toc_launcher_hovered){
             tip_markup = "<span font='sans 10' >Shows table of contents(CTRL + T)</span>";
         }
-        if(tip_markup){
+        if(ui.is_panel_hovered && tip_markup){
             gtk_tooltip_set_markup(GTK_TOOLTIP(tooltip),
                                    tip_markup); 
             return TRUE;
@@ -4106,7 +4133,7 @@ destroy_app()
     rect_free(ui.book_details_area_rect);
     rect_free(ui.continue_to_book_button_rect);
     rect_free(ui.app_info_area_rect);
-    
+    rect_free(ui.panel_rect);
     rect_free(ui.zoom_widget_PF_rect);
     rect_free(ui.zoom_widget_WF_rect);
     rect_free(ui.zoom_widget_IN_rect);
@@ -4147,10 +4174,12 @@ on_app_quit(GtkWidget *widget,
 void
 init_app(GtkApplication *app)
 {
+    const double widget_width = 800,
+                 widget_height = 600;
     ui.main_window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(ui.main_window), "readaratus");
     gtk_window_set_default_size(GTK_WINDOW(ui.main_window),
-                                800, 600);
+                                widget_width, widget_height);
     gtk_widget_set_events(ui.main_window, 
                           GDK_STRUCTURE_MASK);
     ui.is_fullscreen = FALSE;
@@ -4158,7 +4187,7 @@ init_app(GtkApplication *app)
                      G_CALLBACK(window_state_callback), NULL);
     ui.vellum = gtk_drawing_area_new();
     gtk_widget_set_size_request(ui.vellum,
-                                800, 600);
+                                widget_width, widget_height);
     gtk_widget_set_has_tooltip(ui.vellum,
                                TRUE);
     g_signal_connect(G_OBJECT(ui.vellum), "draw",
@@ -4210,6 +4239,13 @@ init_app(GtkApplication *app)
                                               "text"); 
     ui.pointer_cursor = gdk_cursor_new_from_name(gtk_widget_get_display(ui.vellum),
                                                  "pointer"); 
+    /* dynamic objects */
+    ui.is_link_hovered = FALSE;
+    ui.is_find_result_hovered = FALSE;
+    ui.is_unit_hovered = FALSE;
+    /* panel */
+    ui.panel_rect = rect_new();
+    ui.is_panel_hovered = FALSE;
     /* zoom widget */
     ui.is_zoom_widget_PF_hovered = FALSE;
     ui.zoom_widget_PF_rect = rect_new();
