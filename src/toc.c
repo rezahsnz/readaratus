@@ -418,14 +418,11 @@ toc_fix_labels_blindly(TOCItem    *toc_item,
                        const char *label_parent)
 {
     /* 
-      for tocs that do not provide labels or ids, we will blindly generate
-      labels:
-       - depth 1: chapter
-       - depth 2: section
-       - depth 3: subsection
-               .
-               .
-               .
+      for tocs that do not provide labels or ids, we will generate labels
+      blindly:
+          depth 1: chapter
+              depth 2: section
+                  depth 3: subsection        
     */
     if(!toc_item){
         return;
@@ -462,6 +459,7 @@ toc_create_from_poppler_index(PopplerDocument *doc,
                    NULL,
                    &has_labels);
     if(!has_labels){
+        /* @ try to infer labels by text analysis */
         toc_fix_labels_blindly(*head_item,
                                NULL);
         g_print("TOC is blindly labeled, bear with it.\n");

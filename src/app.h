@@ -55,6 +55,10 @@ struct Ui
     /* panel */
     Rect *panel_rect;
     gboolean is_panel_hovered;
+    /* dynamic objects */
+    gboolean is_find_result_hovered;
+    gboolean is_link_hovered;
+    gboolean is_unit_hovered;
     /* page navigation */
     gboolean is_next_prev_page_hovered;
     /* zoom widget */

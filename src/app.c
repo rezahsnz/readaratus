@@ -1284,7 +1284,6 @@ zero_document(void)
     d.preserved_progress_y = 0.0;
     d.num_pages = -1;
     d.cur_page_num = -1;
-    /*d.zoom_level = PageFit;*/
     d.toc.head_item = NULL;
     d.toc.labels = NULL;
     d.toc.flattened_items = NULL;
@@ -1295,7 +1294,20 @@ zero_document(void)
     d.find_details.selected_p = NULL;
     d.find_details.find_results = NULL;
     d.find_details.max_results = 0;
-    d.find_details.max_results_page_num = -1;    
+    d.find_details.max_results_page_num = -1;
+    ui.is_link_hovered = FALSE;
+    ui.is_find_result_hovered = FALSE;
+    ui.is_unit_hovered = FALSE;
+    ui.is_panel_hovered = FALSE;
+    ui.is_zoom_widget_PF_hovered = FALSE;
+    ui.is_zoom_widget_WF_hovered = FALSE;
+    ui.is_zoom_widget_IN_hovered = FALSE;
+    ui.is_zoom_widget_OUT_hovered = FALSE;
+    ui.is_prev_page_button_hovered = FALSE;
+    ui.is_next_page_button_hovered = FALSE;
+    ui.is_teleport_launcher_hovered = FALSE;
+    ui.is_find_text_launcher_hovered = FALSE;
+    ui.is_toc_launcher_hovered = FALSE;
 }
 
 static void
@@ -1535,6 +1547,11 @@ import_pdf(void)
                                                 subject ? subject : "N/A",
                                                 format ? format : "N/A",
                                                 num_pages_str);
+    char *window_title = g_strdup_printf("readaratus - '%s'", 
+                                         title ? title : fn);
+    gtk_window_set_title(GTK_WINDOW(ui.main_window),
+                         window_title);
+    g_free(window_title);
     g_free(title);
     g_free(author);
     g_free(subject);
@@ -1598,10 +1615,6 @@ activate_link (Link *link)
         d.preserved_progress_y = progress_y;
         goto_page(link->target_page_num,
                   progress_x, progress_y);
-    }
-    else{
-        g_print("link: %s\n",
-                link->tip);
     }
 }
 
@@ -2434,8 +2447,6 @@ draw_reading_mode(cairo_t *cr)
     cairo_fill(cr);
     /* links */ 
     GList *list_p = meta->links;   
-    cairo_set_source_rgb(cr,
-                         blue_r, blue_g, blue_b);
     while(list_p){
         Link *link = list_p->data;
         Rect img_rect = map_physical_rect_to_image(link->physical_layout,
@@ -2448,21 +2459,11 @@ draw_reading_mode(cairo_t *cr)
         cairo_rectangle(cr,
                         img_rect.x1, img_rect.y1,
                         rect_width(&img_rect), rect_height(&img_rect));
-        if(link->is_hovered){
-            cairo_set_dash(cr,
-                           dashed_style,
-                           num_dashes,
-                           0);
-        }
-        else{
-            cairo_set_dash(cr,
-                           NULL, 0, 0);
-        }
-        cairo_stroke(cr);
+        cairo_set_source_rgba(cr,
+                              blue_r, blue_g, blue_b, link->is_hovered ? 0.4 : 0.1);
+        cairo_fill(cr);
         list_p = list_p->next;
     }
-    cairo_set_dash(cr,
-                   NULL, 0, 0);        
     /* converted units */
     list_p = meta->converted_units;
     while(list_p){
@@ -2479,33 +2480,18 @@ draw_reading_mode(cairo_t *cr)
                                                        image_height,
                                                        d.image_origin_x,
                                                        d.image_origin_y);
-                cairo_move_to(cr,
-                              rect.x1, rect.y1);
-                cairo_line_to(cr,
-                              rect.x2, rect.y1);
-                if(g_list_last(fr->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                else{
-                    cairo_move_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                cairo_line_to(cr,
-                              rect.x1, rect.y2);
-                if(g_list_first(fr->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x1, rect.y1);
-                }
+                cairo_rectangle(cr,
+                                rect.x1, rect.y1,
+                                rect_width(&rect), rect_height(&rect));
                 rect_p = rect_p->next;
             }
             result_p = result_p->next;
         }
         list_p = list_p->next;
     }
-    cairo_set_source_rgb(cr,
-                         gotham_green_r, gotham_green_g, gotham_green_b);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         gotham_green_r, gotham_green_g, gotham_green_b, 0.2);
+    cairo_fill(cr);
     /* referenced figures */
     list_p = meta->referenced_figures;
     while(list_p){
@@ -2522,35 +2508,18 @@ draw_reading_mode(cairo_t *cr)
                                                        image_height,
                                                        d.image_origin_x,
                                                        d.image_origin_y);
-                cairo_move_to(cr,
-                              rect.x1, rect.y1);
-                cairo_line_to(cr,
-                              rect.x2, rect.y1);
-                if(g_list_last(find_result->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                else{
-                    cairo_move_to(cr,
-                                  rect.x2, rect.y2);
-                }
-                cairo_line_to(cr,
-                              rect.x1, rect.y2);
-                if(g_list_first(find_result->physical_layouts) == rect_p){
-                    cairo_line_to(cr,
-                                  rect.x1, rect.y1);
-                }
+                cairo_rectangle(cr,
+                                rect.x1, rect.y1,
+                                rect_width(&rect), rect_height(&rect));
                 rect_p = rect_p->next;
             }
             result_p = result_p->next;
         }
         list_p = list_p->next;
     }
-    if(meta->referenced_figures){
-        cairo_set_source_rgb(cr,
-                             1, 0, 1);
-        cairo_stroke(cr);
-    }
+    cairo_set_source_rgba(cr,
+                          1, 0, 1, 0.3);
+    cairo_fill(cr);
     /* find results */
     GList *result_p = meta->find_results;
     while(result_p){
@@ -2564,58 +2533,38 @@ draw_reading_mode(cairo_t *cr)
                                                    image_height,
                                                    d.image_origin_x,
                                                    d.image_origin_y);
-            cairo_move_to(cr,
-                          rect.x1, rect.y1);
-            cairo_line_to(cr,
-                          rect.x2, rect.y1);
-            if(g_list_last(find_result->physical_layouts) == rect_p &&
-               !find_result->page_postfix)
-            {
-                cairo_line_to(cr,
-                              rect.x2, rect.y2);
-            }
-            else{
-                cairo_move_to(cr,
-                              rect.x2, rect.y2);
-            }
-            cairo_line_to(cr,
-                          rect.x1, rect.y2);
-            if(g_list_first(find_result->physical_layouts) == rect_p &&
-               !find_result->page_prefix)
-            {
-                cairo_line_to(cr,
-                              rect.x1, rect.y1);
-            }
+            cairo_rectangle(cr,
+                            rect.x1, rect.y1,
+                            rect_width(&rect), rect_height(&rect));
             rect_p = rect_p->next;
-        }
+        }        
         if(d.find_details.selected_p && d.find_details.selected_p->data == find_result){
-           cairo_set_dash(cr,
-                          dashed_style,
-                          num_dashes,
-                          0);             
+            cairo_set_source_rgba(cr,
+                              giants_orange_r, giants_orange_g, giants_orange_b, 0.3);
         }
         else{
-            cairo_set_dash(cr,
-                           NULL, 0, 0);
+            cairo_set_source_rgba(cr,
+                              giants_orange_r, giants_orange_g, giants_orange_b, 0.2);
         }
-        cairo_set_source_rgb(cr,
-                             giants_orange_r, giants_orange_g, giants_orange_b);    
-        cairo_stroke(cr); 
+        cairo_fill(cr);
         result_p = result_p->next;
     }
-    cairo_set_dash(cr,
-                   NULL, 0, 0);
     /* active referenced figure */
     if(meta->active_referenced_figure){        
         cairo_surface_t *ref_surface = meta->active_referenced_figure->reference->image;
         double ref_image_width = cairo_image_surface_get_width(ref_surface);
         double ref_image_height = cairo_image_surface_get_height(ref_surface);
         double ref_ar = ref_image_height / ref_image_width;
-        gboolean scaled = ref_image_width > widget_width || ref_image_height > widget_height;
-        if(scaled){
+        /* only 90% of total widget area can be occupied by a referenced figure */
+        double ref_widget_width = widget_width * 0.9,
+               ref_widget_height = widget_height * 0.9;
+        const double frame_padding = MIN(2, widget_width * 0.05);
+        gboolean scale_figure = ref_image_width > ref_widget_width ||
+                                ref_image_height > ref_widget_height;
+        if(scale_figure){
             double scaled_width, scaled_height;
-            double sx = widget_width < ref_image_width ? widget_width / ref_image_width : 1;
-            double sy = widget_height < ref_image_height ? widget_height / ref_image_height : 1;
+            double sx = ref_widget_width< ref_image_width ? ref_widget_width / ref_image_width : 1;
+            double sy = ref_widget_height < ref_image_height ? ref_widget_height / ref_image_height : 1;
             if(sy < 1){
                 scaled_height = ref_image_height * sy;
                 scaled_width =  scaled_height / ref_ar;
@@ -2641,70 +2590,38 @@ draw_reading_mode(cairo_t *cr)
             ref_image_width = cairo_image_surface_get_width(ref_surface);
             ref_image_height = cairo_image_surface_get_height(ref_surface);
         }
-        Rect caption_rect;
-        FindResult *find_result =  meta->active_referenced_figure->activated_find_result->data;
-        GList *rect_p = find_result->physical_layouts;
-        while(rect_p){
-            Rect rect = map_physical_rect_to_image(rect_p->data,
-                                                   meta->page_width,
-                                                   meta->page_height,
-                                                   image_width,
-                                                   image_height,
-                                                   d.image_origin_x,
-                                                   d.image_origin_y);
-            if(rect_p == g_list_first(find_result->physical_layouts)){
-                caption_rect = rect;
-            }
-            cairo_move_to(cr,
-                          rect.x1, rect.y1);
-            cairo_line_to(cr,
-                          rect.x2, rect.y1);
-            if(g_list_last(find_result->physical_layouts) == rect_p){
-                cairo_line_to(cr,
-                              rect.x2, rect.y2);
-            }
-            else{
-                cairo_move_to(cr,
-                              rect.x2, rect.y2);
-            }
-            cairo_line_to(cr,
-                          rect.x1, rect.y2);
-            if(g_list_first(find_result->physical_layouts) == rect_p){
-                cairo_line_to(cr,
-                              rect.x1, rect.y1);
-            }
-            rect_p = rect_p->next;
-        }
+        /* pose referenced figure */
+        GList *find_results = meta->active_referenced_figure->activated_find_result->data;
+        Rect caption_rect = map_physical_rect_to_image(g_list_first(find_results)->data,
+                                                       meta->page_width, meta->page_height,
+                                                       image_width, image_height,
+                                                       d.image_origin_x, d.image_origin_y);
         double caption_cx = rect_center_x(&caption_rect);
-        int padding = 1;
-        double frame_x1 = caption_cx - ref_image_width / 2 - padding;
-        double frame_y1 = caption_rect.y1 - ref_image_height - 2 * padding;
-        if(frame_y1 >= 0){
-            if(frame_x1 < 0){
-                frame_x1 = 0; 
-            }
-        }
-        else{
-            frame_y1 = 0;            
-            frame_x1 = caption_rect.x1 - ref_image_width - 2 * padding;
-            if(frame_x1 < 0){
-                frame_x1 = caption_rect.x2;
+        double frame_x1 = caption_cx - ref_image_width / 2 - 2 * frame_padding;
+        double frame_y1 = caption_rect.y1 - ref_image_height - 2 * frame_padding;
+        if(frame_y1 < 0){
+            frame_y1 = caption_rect.y2 + frame_padding;
+            if(frame_y1 + ref_image_height > (widget_height - frame_padding)){
+                frame_y1 = frame_padding;
             }
         }                
+        if(frame_x1 < 0 || (frame_x1 + ref_image_width > (widget_width - frame_padding))){
+            frame_x1 = frame_padding;
+        }
         cairo_rectangle(cr,
-                        frame_x1 + padding, frame_y1 + padding,
-                        ref_image_width + padding, ref_image_height + padding);  
+                        frame_x1 + frame_padding, frame_y1 + frame_padding,
+                        ref_image_width, ref_image_height);  
         cairo_set_source_rgb(cr,
                              0.5, 0.5, 0.5);
         cairo_stroke(cr);
         cairo_rectangle(cr,
-                        frame_x1 + padding, frame_y1 + padding,
+                        frame_x1 + frame_padding, frame_y1 + frame_padding,
                         ref_image_width, ref_image_height); 
         cairo_set_source_surface(cr,
                                  ref_surface,
-                                 frame_x1 + padding, frame_y1 + padding);
+                                 frame_x1 + frame_padding, frame_y1 + frame_padding);
         cairo_fill(cr);  
-        if(scaled){
+        if(scale_figure){
             cairo_surface_destroy(ref_surface);
         }      
     }
@@ -3076,7 +2993,7 @@ draw_reading_mode(cairo_t *cr)
                             data_box_height);            
         }
         cairo_set_source_rgba(cr,
-                              giants_orange_r, giants_orange_g, giants_orange_b, 0.8);
+                              giants_orange_r, giants_orange_g, giants_orange_b, 1);
         cairo_fill(cr);
     }
 
@@ -3399,7 +3316,7 @@ draw_help_mode(cairo_t *cr)
     rect.x2 = widget_width - 2 * padding;
     rect.y2 = rect.y1 + 2 * padding;
     rect = draw_text(cr,
-                     "<span font='sans 10' foreground='#222'>When reading you might encounter colorful boxes, hover on to activate them.</span>",
+                     "<span font='sans 10' foreground='#222'>While reading you might encounter colorful shapes, just hover on them to see what happens.</span>",
                      PANGO_ALIGN_LEFT,
                      PANGO_ALIGN_LEFT,
                      &rect); 
@@ -3407,9 +3324,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,
-                         giants_orange_r, giants_orange_g, giants_orange_b);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         giants_orange_r, giants_orange_g, giants_orange_b, 0.3);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3423,9 +3340,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,
-                         gotham_green_r, gotham_green_g, gotham_green_b);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         gotham_green_r, gotham_green_g, gotham_green_b, 0.2);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3440,9 +3357,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,        
-                         1, 0, 1);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,        
+                         1, 0, 1, 0.3);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3457,9 +3374,9 @@ draw_help_mode(cairo_t *cr)
     cairo_rectangle(cr,
                     x1_box, y1_box,
                     box_width, box_height);
-    cairo_set_source_rgb(cr,
-                         0, 0, 1);
-    cairo_stroke(cr);
+    cairo_set_source_rgba(cr,
+                         0, 0, 1, 0.2);
+    cairo_fill(cr);
     rect.x1 = x1_box;
     rect.y1 = y1_box;
     rect.x2 = rect.x1 + box_width;
@@ -3913,26 +3830,7 @@ motion_event_callback (GtkWidget      *widget,
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            d.cur_page_num);
         double image_width = cairo_image_surface_get_width(d.image);
-        double image_height = cairo_image_surface_get_height(d.image);
-        /* link hover */
-        gboolean is_link_hovered = FALSE;
-        GList *link_p = meta->links;
-        while(link_p){
-            Link *link = link_p->data;
-            Rect img_rect = map_physical_rect_to_image(link->physical_layout,
-                                                       meta->page_width,
-                                                       meta->page_height,
-                                                       image_width,
-                                                       image_height,
-                                                       d.image_origin_x,
-                                                       d.image_origin_y);
-            link->is_hovered = rect_contains_point(&img_rect,
-                                                   event->x, event->y);
-            if(!is_link_hovered){
-                is_link_hovered = link->is_hovered;
-            }
-            link_p = link_p->next;
-        }
+        double image_height = cairo_image_surface_get_height(d.image);       
         /* show referenced figure */
         meta->active_referenced_figure = NULL;
         GList *list_p = meta->referenced_figures;
@@ -3967,9 +3865,11 @@ motion_event_callback (GtkWidget      *widget,
                 result_p = result_p->next;
             }
             list_p = list_p->next;            
-        }
+        }        
         /* panel */
-        ui.is_panel_hovered = rect_contains_point(ui.panel_rect,
+        ui.is_panel_hovered = !ui.is_link_hovered && !ui.is_find_result_hovered &&
+                              !ui.is_unit_hovered &&!meta->active_referenced_figure &&
+                              rect_contains_point(ui.panel_rect,
                                                   event->x, event->y);
         if(ui.is_panel_hovered){
             ui.is_prev_page_button_hovered = d.cur_page_num > 0 &&
@@ -3995,7 +3895,7 @@ motion_event_callback (GtkWidget      *widget,
             ui.is_toc_launcher_hovered = rect_contains_point(ui.toc_launcher_rect,
                                                              event->x, event->y);
         }        
-        is_cursor_set = is_link_hovered ||
+        is_cursor_set = ui.is_link_hovered ||
                         ui.is_prev_page_button_hovered || ui.is_next_page_button_hovered ||
                         ui.is_zoom_widget_PF_hovered || ui.is_zoom_widget_WF_hovered || 
                         ui.is_zoom_widget_IN_hovered || ui.is_zoom_widget_OUT_hovered ||
@@ -4060,6 +3960,7 @@ tooltip_event_callback(GtkWidget  *widget,
         return FALSE; 
     }
     if(ui.app_mode == ReadingMode){
+        ui.is_unit_hovered = FALSE;    
         /* units */
         char *unit_tip = NULL;  
         PageMeta *meta = g_ptr_array_index(d.metae,
@@ -4103,8 +4004,10 @@ tooltip_event_callback(GtkWidget  *widget,
         if(tooltip_cv){
             unit_tip = g_strdup_printf("<span font='sans 10' >~= %s</span>",
                                        tooltip_cv->value_str);
+            ui.is_unit_hovered = TRUE;
         }
         /* find results */
+        ui.is_find_result_hovered = FALSE;    
         char *find_tip = NULL;
         list_p = meta->find_results;
         while(list_p){
@@ -4134,9 +4037,11 @@ tooltip_event_callback(GtkWidget  *widget,
             FindResult *fr = list_p->data;
             find_tip = g_strdup_printf("<span font='sans 10' >%s</span>",
                                        fr->tip);
+            ui.is_find_result_hovered = TRUE;
         }
         /* links */
         char *link_tip = NULL;
+        ui.is_link_hovered = FALSE;
         list_p = meta->links;
         while(list_p){
             Link *link = list_p->data;
@@ -4147,12 +4052,12 @@ tooltip_event_callback(GtkWidget  *widget,
                                                        image_height,
                                                        d.image_origin_x,
                                                        d.image_origin_y);
-            if(rect_contains_point(&img_rect,
-                                   x, y))
-            {
-                link_tip = g_strdup_printf("<span font='sans 10' >Link</span>: %s",
+            link->is_hovered = rect_contains_point(&img_rect,
+                                                   x, y);
+            if(link->is_hovered){
+                link_tip = g_strdup_printf("<span font='sans 10'>%s</span>",
                                            link->tip);
-                break;
+                ui.is_link_hovered = TRUE;
             }
             list_p = list_p->next;
         }
@@ -4194,7 +4099,7 @@ tooltip_event_callback(GtkWidget  *widget,
         else if(ui.is_toc_launcher_hovered){
             tip_markup = "<span font='sans 10' >Shows table of contents(CTRL + T)</span>";
         }
-        if(tip_markup){
+        if(ui.is_panel_hovered && tip_markup){
             gtk_tooltip_set_markup(GTK_TOOLTIP(tooltip),
                                    tip_markup); 
             return TRUE;
@@ -4334,6 +4239,10 @@ init_app(GtkApplication *app)
                                               "text"); 
     ui.pointer_cursor = gdk_cursor_new_from_name(gtk_widget_get_display(ui.vellum),
                                                  "pointer"); 
+    /* dynamic objects */
+    ui.is_link_hovered = FALSE;
+    ui.is_find_result_hovered = FALSE;
+    ui.is_unit_hovered = FALSE;
     /* panel */
     ui.panel_rect = rect_new();
     ui.is_panel_hovered = FALSE;
