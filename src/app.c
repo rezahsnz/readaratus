@@ -3702,49 +3702,49 @@ button_press_callback (GtkWidget      *widget,
             link_p = link_p->next;
         }
         /* navigation widget */
-        if(rect_contains_point(ui.prev_page_button_rect,
-                               event->x, event->y))
+        if(ui.is_panel_hovered && rect_contains_point(ui.prev_page_button_rect,
+                                                      event->x, event->y))
         {
             previous_page();
         }
-        if(rect_contains_point(ui.next_page_button_rect,
-                               event->x, event->y))
+        if(ui.is_panel_hovered && rect_contains_point(ui.next_page_button_rect,
+                                                      event->x, event->y))
         {
             next_page();
         }
         /* zoom widget */
-        if(rect_contains_point(ui.zoom_widget_PF_rect,
-                               event->x, event->y))
+        if(ui.is_panel_hovered && rect_contains_point(ui.zoom_widget_PF_rect,
+                                                      event->x, event->y))
         {
             zoom_page_fit();
         }
-        else if(rect_contains_point(ui.zoom_widget_WF_rect,
-                                    event->x, event->y))
+        else if(ui.is_panel_hovered && rect_contains_point(ui.zoom_widget_WF_rect,
+                                                           event->x, event->y))
         {
             zoom_width_fit();
         }
-        else if(rect_contains_point(ui.zoom_widget_IN_rect,
-                                    event->x, event->y))
+        else if(ui.is_panel_hovered && rect_contains_point(ui.zoom_widget_IN_rect,
+                                                           event->x, event->y))
         {
             zoom_in();
         }
-        else if(rect_contains_point(ui.zoom_widget_OUT_rect,
-                                    event->x, event->y))
+        else if(ui.is_panel_hovered && rect_contains_point(ui.zoom_widget_OUT_rect,
+                                                           event->x, event->y))
         {
             zoom_out();
         }
-        else if(rect_contains_point(ui.teleport_launcher_rect,
-                                    event->x, event->y))
+        else if(ui.is_panel_hovered && rect_contains_point(ui.teleport_launcher_rect,
+                                                           event->x, event->y))
         {
             teleport_widget_show();
         }
-        else if(rect_contains_point(ui.find_text_launcher_rect,
-                                    event->x, event->y))
+        else if(ui.is_panel_hovered && rect_contains_point(ui.find_text_launcher_rect,
+                                                           event->x, event->y))
         {
             find_widget_show();
         }
-        else if(rect_contains_point(ui.toc_launcher_rect,
-                                    event->x, event->y))
+        else if(ui.is_panel_hovered && rect_contains_point(ui.toc_launcher_rect,
+                                                           event->x, event->y))
         {
             switch_app_mode(TOCMode);
         }
