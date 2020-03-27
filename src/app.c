@@ -375,18 +375,18 @@ load_text_layouts(PageMeta    *meta,
     poppler_page_get_text_layout(page,
                                  &phys_layouts,
                                  &meta->num_layouts);
-    meta->physical_text_layouts = g_ptr_array_sized_new(meta->num_layouts);
     meta->mean_line_height = 0.0;
-    for(int r = 0; r < meta->num_layouts; r++){
-        Rect *phys_layout = rect_from_poppler_rectangle(&phys_layouts[r]);
-        meta->mean_line_height += phys_layout->y2 - phys_layout->y1;
-        g_ptr_array_add(meta->physical_text_layouts,
-                        phys_layout);
-    }
     if(meta->num_layouts > 0){
+        meta->physical_text_layouts = g_ptr_array_sized_new(meta->num_layouts);
+        for(int r = 0; r < meta->num_layouts; r++){
+            Rect *phys_layout = rect_from_poppler_rectangle(&phys_layouts[r]);
+            meta->mean_line_height += phys_layout->y2 - phys_layout->y1;
+            g_ptr_array_add(meta->physical_text_layouts,
+                            phys_layout);
+        }
         meta->mean_line_height /= meta->num_layouts;
+        g_free(phys_layouts);
     }
-    g_free(phys_layouts);
 }
 
 static void
@@ -1399,11 +1399,13 @@ destroy_document(void)
         PageMeta *meta = g_ptr_array_index(d.metae,
                                            page_num);
         /* text layouts */
-        for(int li = 0; li < meta->num_layouts; li++){
-            rect_free(g_ptr_array_index(meta->physical_text_layouts,
-                                        li));
+        if(meta->num_layouts > 0){
+            for(int li = 0; li < meta->num_layouts; li++){
+                rect_free(g_ptr_array_index(meta->physical_text_layouts,
+                                            li));
+            }
+            g_ptr_array_unref(meta->physical_text_layouts);
         }
-        g_ptr_array_unref(meta->physical_text_layouts);
         /* text */
         g_free(meta->text);
         /* links */
@@ -1462,7 +1464,6 @@ destroy_document(void)
     g_list_free_full(d.toc.navigation_button_rects,
                      (GDestroyNotify)rect_free);
     g_list_free(d.toc.flattened_items);
-    g_list_free(d.find_details.find_results);
     if(d.go_back_stack){
         gpointer *p = g_queue_pop_head(d.go_back_stack);
         while(p){
@@ -1542,16 +1543,16 @@ import_pdf(void)
     d.doc_info.book_info_label = g_strdup("<span font='sans 10' foreground='blue'>Location\n\nTitle\n\nAuthor\n\nSubject\n\nFormat\n\nPages</span>");
     d.doc_info.book_info_data = g_strdup_printf("<span font='sans 10' foreground='#222222'>%s\n\n%s\n\n%s\n\n%s\n\n%s\n\n%s</span>",
                                                 d.filename,
-                                                title ? title : "N/A",
+                                                title ? title : fn,
                                                 author ? author : "N/A",
                                                 subject ? subject : "N/A",
                                                 format ? format : "N/A",
                                                 num_pages_str);
+    /* @ memory leak is negligible */
     char *window_title = g_strdup_printf("readaratus - '%s'", 
                                          title ? title : fn);
     gtk_window_set_title(GTK_WINDOW(ui.main_window),
                          window_title);
-    g_free(window_title);
     g_free(title);
     g_free(author);
     g_free(subject);
@@ -2388,11 +2389,16 @@ draw_start_mode(cairo_t *cr)
                                            d.cur_page_num);
         char *text_continue;
         if(meta->page_label){
-            text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%s', continue reading</span>",
-                                            meta->page_label->label);
+            if(meta->page_label->label){
+                text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%s', continue reading</span>",
+                                                meta->page_label->label);
+            }
+            else{
+                text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>Continue reading</span>");                
+            }
         }
         else{
-            text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page '%d', continue reading</span>",
+            text_continue = g_strdup_printf("<span font='sans 12' foreground='#222222'>On page %d, continue reading</span>",
                                             d.cur_page_num + 1);
         }  
         
@@ -3139,42 +3145,6 @@ draw_toc_mode(cairo_t *cr)
     draw_toc_items(d.toc.head_item,
                    -d.toc.origin_y,
                    cr);
-    if(d.toc.hovered_item){
-        /* show a thumbnail of toc item's page*/
-        PageMeta *meta = g_ptr_array_index(d.metae,
-                                           d.toc.hovered_item->page_num < 0 ? 0 : d.toc.hovered_item->page_num);        
-        double thumbnail_width = widget_width / 4.236; 
-        double thumbnail_height = thumbnail_width * (meta->page_height / meta->page_width);
-        cairo_surface_t *page_thumbnail = render_page(meta,
-                                                      thumbnail_width, thumbnail_height);
-        double progress_y_start = (meta->page_height - d.toc.hovered_item->offset_y) / meta->page_height;
-        if(progress_y_start >= 0.999){
-            progress_y_start = 0;
-        }
-        cairo_t *cr_progress = cairo_create(page_thumbnail);
-        cairo_rectangle(cr_progress,
-                        0, 0,
-                        thumbnail_width,
-                        thumbnail_height * progress_y_start);
-        cairo_set_source_rgba(cr_progress,
-                              dim_gray_r, dim_gray_r, dim_gray_r, 0.8);
-        cairo_fill(cr_progress);
-        cairo_destroy(cr_progress);
-        double thumbnail_x = rect_center_x(d.toc.hovered_item->rect) - thumbnail_width / 2;
-        thumbnail_x = thumbnail_x < 0 ? d.toc.hovered_item->rect->x1 : thumbnail_x;
-        double padding_y = 4;
-        double thumbnail_y = (d.toc.hovered_item->rect->y1 - padding_y > thumbnail_height)
-                             ? d.toc.hovered_item->rect->y1 - padding_y - thumbnail_height
-                             : d.toc.hovered_item->rect->y2 + padding_y; 
-        cairo_rectangle(cr,
-                        thumbnail_x, thumbnail_y,
-                        thumbnail_width, thumbnail_height);
-        cairo_set_source_surface(cr,
-                                 page_thumbnail,
-                                 thumbnail_x, thumbnail_y);
-        cairo_fill(cr);
-        cairo_surface_destroy(page_thumbnail);        
-    }
     /* navigation buttons: next chapter, ... */
     cairo_rectangle(cr,
                     0, widget_height - toc_navigation_panel_height,
@@ -3251,6 +3221,42 @@ draw_toc_mode(cairo_t *cr)
         g_free(next_markup);
         label_index++;
         list_p = list_p->next;
+    }
+    /* show a thumbnail of toc item's page*/
+    if(d.toc.hovered_item){
+        PageMeta *meta = g_ptr_array_index(d.metae,
+                                           d.toc.hovered_item->page_num < 0 ? 0 : d.toc.hovered_item->page_num);        
+        double thumbnail_width = widget_width / 4.236; 
+        double thumbnail_height = thumbnail_width * (meta->aspect_ratio);
+        cairo_surface_t *page_thumbnail = render_page(meta,
+                                                      thumbnail_width, thumbnail_height);
+        double progress_y_start = (meta->page_height - d.toc.hovered_item->offset_y) / meta->page_height;
+        if(progress_y_start >= 0.999){
+            progress_y_start = 0;
+        }
+        cairo_t *cr_progress = cairo_create(page_thumbnail);
+        cairo_rectangle(cr_progress,
+                        0, 0,
+                        thumbnail_width,
+                        thumbnail_height * progress_y_start);
+        cairo_set_source_rgba(cr_progress,
+                              dim_gray_r, dim_gray_r, dim_gray_r, 0.8);
+        cairo_fill(cr_progress);
+        cairo_destroy(cr_progress);
+        double thumbnail_x = rect_center_x(d.toc.hovered_item->rect) - thumbnail_width / 2;
+        thumbnail_x = thumbnail_x < 0 ? d.toc.hovered_item->rect->x1 : thumbnail_x;
+        double padding_y = 4;
+        double thumbnail_y = (d.toc.hovered_item->rect->y1 - padding_y > thumbnail_height)
+                             ? d.toc.hovered_item->rect->y1 - padding_y - thumbnail_height
+                             : d.toc.hovered_item->rect->y2 + padding_y; 
+        cairo_rectangle(cr,
+                        thumbnail_x, thumbnail_y,
+                        thumbnail_width, thumbnail_height);
+        cairo_set_source_surface(cr,
+                                 page_thumbnail,
+                                 thumbnail_x, thumbnail_y);
+        cairo_fill(cr);
+        cairo_surface_destroy(page_thumbnail);        
     }
     if(d.toc.hovered_navigation_button){
     }

@@ -126,12 +126,12 @@ find_widget_init(GtkWidget *parent)
     whole_words_check_button = gtk_check_button_new_with_label("Whole words");    
     gtk_widget_set_tooltip_markup(whole_words_check_button,
                                   "<span font='sans 10' foreground='#C3C3C3'>Only searches for whole words.</span>");
-    dualpage_check_button = gtk_check_button_new_with_label("Dualpage");
+    dualpage_check_button = gtk_check_button_new_with_label("Dualpage(fuzzy but handy)");
     gtk_widget_set_tooltip_markup(dualpage_check_button,
                                   "<span font='sans 10' foreground='#C3C3C3'>"
                                   "It is common for sentences to be spread across consecutive pages."
-                                  " This options instructs the program to look for parts of the search"
-                                  " term in page <i>X</i> and the rest in page<i>X+1</i>."
+                                  " This option instructs the program to look for parts of the search"
+                                  " term in page <i>X</i> and the rest in page <i>X+1</i>."
                                   "</span>");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dualpage_check_button),
                                  TRUE);        
