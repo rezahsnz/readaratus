@@ -1,6 +1,5 @@
-# readaratus
-
-A dynamic book reading system for computers.
+#  readaratus
+####  A dynamic book reading system for computers
 ## Features
 - Unit conversion
 - Figure referencing
@@ -14,6 +13,21 @@ A dynamic book reading system for computers.
 - Live code snippets 
 - Keyboard-averse gesture commanding
 
+## Compile
+### Dependencies
+ - Poppler's GLib backend
+ - Gtk3 SDK
+ ###
+ ```bash
+ make
+ ./readaraus
+ ```
+
 ## License
-This project is licensed under the terms of GNU General Public License Version 3 or later - see the [LICENSE](LICENSE) file for details
+This project is licensed under the terms of GNU General Public License Version 3 or later - see the [LICENSE](LICENSE) file for details.
+
+## Demo
+www.youtube.com/watch?v=j3546bj08Vk
+
+## Website
 [readaratus.ir](https://www.readaratus.ir)
