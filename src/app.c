@@ -1488,13 +1488,11 @@ import_pdf(void)
     GtkWidget *dialog = gtk_file_chooser_dialog_new ("Choose a book(*.pdf)",
                                                      GTK_WINDOW(ui.main_window),
                                                      GTK_FILE_CHOOSER_ACTION_OPEN,
-                                                     "_Cancel",
-                                                     GTK_RESPONSE_CANCEL,
-                                                     "_Open",
-                                                     GTK_RESPONSE_ACCEPT,
+                                                     "_Cancel", GTK_RESPONSE_CANCEL,
+                                                     "_Open", GTK_RESPONSE_ACCEPT,
                                                      NULL);
     gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog),
-                                        "/home/reza/book");
+                                        ".");
     GtkFileFilter *file_filter = gtk_file_filter_new();
     gtk_file_filter_add_pattern(file_filter,
                                 "*.pdf");
@@ -1951,6 +1949,7 @@ teleport(const char *term)
         goto_page(page_num,
                   0, 0);
         g_free(object_name);
+        teleport_widget_hide();
         return;
     }
     /* object is a navigation request: next/prev page, part, chapter, etc... */
@@ -1969,6 +1968,7 @@ teleport(const char *term)
                   object_name,
                   G_REGEX_MATCH_NOTEMPTY,
                   &match_info);
+    gboolean navigation_matches = g_match_info_matches(match_info);
     if(g_match_info_matches(match_info)){
         go_back_save();
         char *command = g_match_info_fetch_named(match_info,
@@ -2025,6 +2025,10 @@ teleport(const char *term)
         }
     }
     g_match_info_free(match_info);
+    if(navigation_matches){
+        teleport_widget_hide();
+        return;
+    }
     /* object is toc_item, e.g. chapter 1.2 */
     if(d.toc.head_item){
         const TOCItem *target_item = toc_search_by_title(d.toc.head_item,
@@ -2032,6 +2036,7 @@ teleport(const char *term)
         if(target_item){
             goto_toc_item_page(target_item);
             g_free(object_name);
+            teleport_widget_hide();
             return;
         }
     }    
@@ -2053,6 +2058,7 @@ teleport(const char *term)
             {
                 go_back_save();
                 goto_figure_page(target_figure);
+                teleport_widget_hide();
                 break;
             }
         }
@@ -2073,9 +2079,6 @@ static void
 on_teleport_request_received(GtkWidget *sender,
                              gpointer   user_data)
 {
-    if(!d.metae){
-        return;
-    }
     teleport(user_data);
 }
 
@@ -2175,19 +2178,18 @@ on_find_request_received(GtkWidget *sender,
                          gpointer   user_data)
 {            
     FindRequestData *find_request = user_data;
-    if(d.metae){
-        destroy_find_results();
-        gtk_widget_queue_draw(ui.vellum);     
-        d.find_details.find_results = find_text(d.doc,
-                                                d.metae,
-                                                find_request->text,
-                                                0, d.num_pages,
-                                                find_request->is_dualpage_checked,
-                                                find_request->is_whole_words_checked);
-
+    destroy_find_results();
+    gtk_widget_queue_draw(ui.vellum);     
+    d.find_details.find_results = find_text(d.doc,
+                                            d.metae,
+                                            find_request->text,
+                                            0, d.num_pages,
+                                            find_request->is_dualpage_checked,
+                                            find_request->is_whole_words_checked);
+    int num_results = g_list_length(d.find_details.find_results);
+    if(num_results > 0){
         d.find_details.find_results = g_list_sort(d.find_details.find_results,
                                                   compare_find_results);
-        int num_results = g_list_length(d.find_details.find_results);
         int i = 0;
         GList *result_p = d.find_details.find_results;
         while(result_p){
@@ -2226,7 +2228,8 @@ on_find_request_received(GtkWidget *sender,
             }
         }
         find_next();
-    }    
+        find_widget_hide();
+    }
     g_free(find_request);
     show_panel();
 }
@@ -2999,7 +3002,7 @@ draw_reading_mode(cairo_t *cr)
                             data_box_height);            
         }
         cairo_set_source_rgba(cr,
-                              giants_orange_r, giants_orange_g, giants_orange_b, 1);
+                              giants_orange_r, giants_orange_g, giants_orange_b, 0.8);
         cairo_fill(cr);
     }
 
@@ -3599,12 +3602,12 @@ key_press_callback(GtkWidget   *widget,
                     switch_app_mode(TOCMode);
                 }
                 else{
-                    teleport_widget_show();                
+                    teleport_widget_show();
                 }
             }
             else if(ui.app_mode == TOCMode){
                 if(!(event->state & GDK_CONTROL_MASK)){
-                    teleport_widget_show();                
+                    teleport_widget_show();
                 }
             }            
             break;

@@ -18,7 +18,7 @@
 #include "find_widget.h"
 
 static GtkWidget *find_window = NULL;
-static GtkWidget *text_view = NULL;
+static GtkWidget *text_entry = NULL;
 static GtkWidget *whole_words_check_button = NULL;
 static GtkWidget *dualpage_check_button = NULL;
 static GtkWidget *find_button = NULL;
@@ -55,37 +55,41 @@ on_widget_deleted(GtkWidget *widget,
 }
 
 static void
+request_find()
+{
+    if(gtk_entry_get_text_length(GTK_ENTRY(text_entry)) == 0){
+         return;
+    }
+    const char *text = gtk_entry_get_text(GTK_ENTRY(text_entry));
+
+    FindRequestData *find_request = g_malloc(sizeof(FindRequestData));
+    find_request->text = text;
+    find_request->is_whole_words_checked = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(whole_words_check_button));
+    find_request->is_dualpage_checked = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dualpage_check_button));
+    g_signal_emit_by_name(find_window,
+                          "find_request_event",
+                          find_request);
+}
+
+static void
 on_find_button_clicked(GtkButton *button,
                        gpointer   user_data)
 {
-    GtkTextBuffer *text_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
-    GtkTextIter iter_start, iter_end;
-    gtk_text_buffer_get_iter_at_offset (text_buffer,
-                                        &iter_start,
-                                        0);
-    gtk_text_buffer_get_iter_at_offset (text_buffer,
-                                        &iter_end,
-                                        -1);
-    const char *text = gtk_text_buffer_get_text(text_buffer,
-                                                &iter_start,
-                                                &iter_end,
-                                                TRUE);
-    if(strlen(text)){
-        FindRequestData *find_request = g_malloc(sizeof(FindRequestData));
-        find_request->text = text;
-        find_request->is_whole_words_checked = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(whole_words_check_button));
-        find_request->is_dualpage_checked = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dualpage_check_button));
-        g_signal_emit_by_name(find_window,
-                              "find_request_event",
-                              find_request);
-    }
+    request_find();
+}
+
+static void
+on_text_entry_activated(GtkEntry *entry,
+                        gpointer user_data)
+{
+    request_find();
 }
 
 void
 find_widget_show(void)
 {
     gtk_widget_show_all(find_window);
-    gtk_widget_grab_focus(text_view);
+    gtk_widget_grab_focus(text_entry);
 }
 
 GtkWidget *
@@ -120,8 +124,12 @@ find_widget_init(GtkWidget *parent)
     g_signal_connect(G_OBJECT(find_window), "delete_event",
                      G_CALLBACK(on_widget_deleted), NULL);
     /* setup ui */    
-    text_view = gtk_text_view_new();
-    gtk_widget_set_tooltip_markup(text_view,
+    text_entry = gtk_entry_new();
+    gtk_entry_set_max_length(GTK_ENTRY(text_entry),
+                             610); 
+    g_signal_connect(G_OBJECT(text_entry), "activate",
+                     G_CALLBACK(on_text_entry_activated), NULL);
+    gtk_widget_set_tooltip_markup(text_entry,
                                   "<span font='sans 10' foreground='#C3C3C3'>Put your search term here.</span>");
     whole_words_check_button = gtk_check_button_new_with_label("Whole words");    
     gtk_widget_set_tooltip_markup(whole_words_check_button,
@@ -134,7 +142,7 @@ find_widget_init(GtkWidget *parent)
                                   " term in page <i>X</i> and the rest in page <i>X+1</i>."
                                   "</span>");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dualpage_check_button),
-                                 TRUE);        
+                                 FALSE);        
     find_button = gtk_button_new_with_label("Look up");
     g_signal_connect(G_OBJECT(find_button), "clicked",
                      G_CALLBACK(on_find_button_clicked), NULL);
@@ -144,20 +152,20 @@ find_widget_init(GtkWidget *parent)
     gtk_grid_set_column_spacing(GTK_GRID(grid_layout),
                                 12);
     gtk_grid_attach(GTK_GRID(grid_layout),
-                    text_view,
+                    text_entry,
                     0, 0,
-                    6, 6);
+                    6, 1);
     gtk_grid_attach(GTK_GRID(grid_layout),
                     whole_words_check_button,
-                    0, 6,
+                    0, 1,
                     1, 1);
     gtk_grid_attach(GTK_GRID(grid_layout),
                     dualpage_check_button,
-                    0, 7,
+                    0, 2,
                     1, 1);
     gtk_grid_attach(GTK_GRID(grid_layout),
                     find_button,
-                    5, 8,
+                    5, 3,
                     1, 1);
     gtk_container_add(GTK_CONTAINER(find_window),
                       grid_layout);

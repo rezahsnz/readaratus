@@ -40,8 +40,8 @@ on_widget_deleted(GtkWidget *widget,
 static void
 request_teleportation(void)
 {
-        if(gtk_entry_get_text_length(GTK_ENTRY(text_entry))){
-        const char *text = gtk_entry_get_text(GTK_ENTRY(text_entry));        
+    if(gtk_entry_get_text_length(GTK_ENTRY(text_entry))){
+        const char *text = gtk_entry_get_text(GTK_ENTRY(text_entry));
         g_signal_emit_by_name(teleport_window,
                               "teleport_request_event",
                               text);
@@ -170,16 +170,12 @@ teleport_widget_init(GtkWidget *parent)
                                 12);
     gtk_grid_attach(GTK_GRID(grid_layout),
                     label,
-                    0,
-                    0,
-                    3,
-                    1);
+                    0, 0,
+                    3, 1);
     gtk_grid_attach(GTK_GRID(grid_layout),
                     text_entry,
-                    0,
-                    1,
-                    2,
-                    1);
+                    0, 1,
+                    2, 1);
     gtk_grid_attach_next_to(GTK_GRID(grid_layout),
                             teleport_button,
                             text_entry,
