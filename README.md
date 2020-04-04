@@ -31,3 +31,6 @@ www.youtube.com/watch?v=j3546bj08Vk
 
 ## Website
 [readaratus.ir](https://www.readaratus.ir)
+
+## Donate
+ETH: 0x85f5a4e1fC4F44a014B940a224dDe22D6E73F2DC
