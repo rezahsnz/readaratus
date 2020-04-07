@@ -16,6 +16,7 @@
  */
 
 #include "app.h"
+#include "resource/resource.h"
 #include <cairo.h>
 #include <pango/pangocairo.h>
 #include <math.h>
@@ -2423,11 +2424,21 @@ draw_start_mode(cairo_t *cr)
                     rect_width(ui.app_info_area_rect), rect_height(ui.app_info_area_rect));
     cairo_set_source_rgb(cr,
                          gray_r, gray_r, gray_r);
-    cairo_fill(cr); 
-    draw_text(cr,
-              ui.app_info_text,
-              PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
-              ui.app_info_area_rect);
+    cairo_fill(cr);    
+    Rect about_rect = draw_text(cr,
+                                ui.app_info_text,
+                                PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
+                                ui.app_info_area_rect);
+    GdkPixbuf *icon48 = g_list_nth_data(ui.icons, 2);
+    double logo_x1 = ui.app_info_area_rect->x1 + rect_width(ui.app_info_area_rect) / 2 - 24;
+    double logo_y1 = about_rect.y1 - (48 + 8);
+    cairo_rectangle(cr,
+                    logo_x1, logo_y1,
+                    48, 48);
+    gdk_cairo_set_source_pixbuf(cr,
+                                icon48,
+                                logo_x1, logo_y1);
+    cairo_fill(cr);
 }
 
 static void
@@ -4166,7 +4177,9 @@ destroy_app()
 
     teleport_widget_destroy();
     find_widget_destroy();
-
+    readaratus_unregister_resource();
+    /* g_list_free_full(ui.icons,
+                      (GDestroyNotify)gdk_pixbuf_unref);*/
     gtk_widget_destroy(ui.main_window);    
 }
 
@@ -4178,6 +4191,29 @@ on_app_quit(GtkWidget *widget,
     destroy_document();
     destroy_app();
     return FALSE;
+}
+
+static void
+load_icons(void)
+{ 
+    GdkPixbuf *icon16 = gdk_pixbuf_new_from_resource("/org/readaratus/decoder/icons/icon16.png",
+                                                     NULL);
+    GdkPixbuf *icon32 = gdk_pixbuf_new_from_resource("/org/readaratus/decoder/icons/icon32.png",
+                                                     NULL);
+    GdkPixbuf *icon48 = gdk_pixbuf_new_from_resource("/org/readaratus/decoder/icons/icon48.png",
+                                                     NULL);
+    GdkPixbuf *icon192 = gdk_pixbuf_new_from_resource("/org/readaratus/decoder/icons/icon192.png",
+                                                     NULL);
+    ui.icons = NULL;
+    ui.icons = g_list_append(ui.icons,
+                             icon16);
+    ui.icons = g_list_append(ui.icons,
+                             icon32);
+    ui.icons = g_list_append(ui.icons,
+                             icon48);
+    ui.icons = g_list_append(ui.icons,
+                             icon192);
+    gtk_window_set_default_icon_list(ui.icons);
 }
 
 void
@@ -4194,6 +4230,8 @@ init_app(GtkApplication *app)
     ui.is_fullscreen = FALSE;
     g_signal_connect(G_OBJECT(ui.main_window), "window_state_event",
                      G_CALLBACK(window_state_callback), NULL);
+    readaratus_register_resource(); 
+    load_icons();
     ui.vellum = gtk_drawing_area_new();
     gtk_widget_set_size_request(ui.vellum,
                                 widget_width, widget_height);

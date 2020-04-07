@@ -36,6 +36,7 @@ enum ZoomLevel
 struct Ui
 {
     GtkWidget *main_window;
+    GList *icons;
     gboolean is_fullscreen;
     GtkWidget *vellum;
     GdkCursor *default_cursor;

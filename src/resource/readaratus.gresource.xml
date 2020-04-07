@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+    <gresource prefix="/org/readaratus/decoder">
+        <file>icons/icon16.png</file>
+        <file>icons/icon32.png</file>
+        <file>icons/icon48.png</file>
+        <file>icons/icon192.png</file>
+    </gresource>
+</gresources>
