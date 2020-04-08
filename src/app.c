@@ -244,16 +244,16 @@ next_page(void)
     d.preserved_progress_x = 0.0;
     d.preserved_progress_y = 0.0;
     goto_page(d.cur_page_num + 1,
-              0, 0);
+              d.preserved_progress_x, d.preserved_progress_y);
 }
 
 static void
 previous_page(void)
 {
     d.preserved_progress_x = 0.0;
-    d.preserved_progress_y = 0.0;
+    d.preserved_progress_y = 0.9999;
     goto_page(d.cur_page_num - 1,
-              0, 0.999);
+              d.preserved_progress_x, d.preserved_progress_y);
 }
 
 static void
@@ -2429,6 +2429,7 @@ draw_start_mode(cairo_t *cr)
                                 ui.app_info_text,
                                 PANGO_ALIGN_CENTER, PANGO_ALIGN_CENTER,
                                 ui.app_info_area_rect);
+    /* 3rd icon is 48x48 */
     GdkPixbuf *icon48 = g_list_nth_data(ui.icons, 2);
     double logo_x1 = ui.app_info_area_rect->x1 + rect_width(ui.app_info_area_rect) / 2 - 24;
     double logo_y1 = about_rect.y1 - (48 + 8);
