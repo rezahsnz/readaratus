@@ -425,13 +425,15 @@ load_links()
                     link->target_progress_y = target.offset_y;
                     PageMeta *meta_target = g_ptr_array_index(d.metae,
                                                               target.page_num);
-                    if(meta_target->page_label->label){
-                        link->tip = g_strdup_printf("Page '%s'",
-                                                    meta_target->page_label->label);
-                    }
-                    else{
-                        link->tip = g_strdup_printf("Page(index): '%d'",
-                                                    target.page_num);
+                    if(target.page_num >= 0 && target.page_num < d.num_pages){
+                        if(meta_target->page_label->label){
+                            link->tip = g_strdup_printf("Page '%s'",
+                                                        meta_target->page_label->label);
+                        }
+                        else{
+                            link->tip = g_strdup_printf("Page(index): '%d'",
+                                                        target.page_num);
+                        }
                     }
                     break;
                 }
@@ -696,7 +698,7 @@ create_image_for_figure(PageMeta *meta,
     cairo_surface_destroy(first_image_surface);
     cairo_surface_t *rendered_page = render_page(meta,
                                                  page_render_width,
-                                                 page_render_height);
+                                                 page_render_height);    
     Rect image_layout = map_physical_rect_to_image(figure->image_physical_layout,
                                                    meta->page_width, meta->page_height,
                                                    page_render_width, page_render_height,
@@ -906,7 +908,7 @@ load_figures(void)
         while(figure_p){
             Figure *figure = figure_p->data;        
             PageMeta *meta = g_ptr_array_index(d.metae,
-                                                      figure->page_num);
+                                               figure->page_num);
             if(!g_hash_table_contains(meta->figures,
                                       figure->id))
             {
@@ -925,10 +927,8 @@ load_figures(void)
         }
         if(closest_figure){    
             PageMeta *meta = g_ptr_array_index(d.metae,
-                                                      closest_figure->page_num);
+                                               closest_figure->page_num);
             closest_figure->caption_physical_layout = closest_caption->physical_layout;
-            closest_figure->image = create_image_for_figure(meta,
-                                                            closest_figure);
             g_hash_table_insert(meta->figures,
                                 closest_figure->id,
                                 closest_figure);
@@ -944,7 +944,6 @@ load_figures(void)
     g_list_free_full(g_hash_table_get_keys(processed_images_hash_table),
                      (GDestroyNotify)g_free);
     g_hash_table_unref(processed_images_hash_table);
-    
     figure_list_p = figures_per_image;
     while(figure_list_p){
         figure_p = figure_list_p->data;
@@ -1431,7 +1430,6 @@ destroy_document(void)
             g_hash_table_iter_init (&iter, meta->figures);
             while(g_hash_table_iter_next(&iter, &key, &value)){
                 Figure *figure = value;
-                cairo_surface_destroy(figure->image);
                 figure_free(figure);
             }
             g_hash_table_unref(meta->figures);
@@ -2571,8 +2569,12 @@ draw_reading_mode(cairo_t *cr)
         result_p = result_p->next;
     }
     /* active referenced figure */
-    if(meta->active_referenced_figure){        
-        cairo_surface_t *ref_surface = meta->active_referenced_figure->reference->image;
+    if(meta->active_referenced_figure){    
+        Figure *ref_figure = meta->active_referenced_figure->reference;
+        PageMeta *ref_meta = g_ptr_array_index(d.metae,
+                                               ref_figure->page_num);
+        cairo_surface_t *ref_surface = create_image_for_figure(ref_meta,
+                                                               ref_figure);
         double ref_image_width = cairo_image_surface_get_width(ref_surface);
         double ref_image_height = cairo_image_surface_get_height(ref_surface);
         double ref_ar = ref_image_height / ref_image_width;
@@ -2607,6 +2609,7 @@ draw_reading_mode(cairo_t *cr)
                                      0, 0);
             cairo_paint(cr_scaled);   
             cairo_destroy(cr_scaled);
+            cairo_surface_destroy(ref_surface);
             ref_surface = surface_scaled;
             ref_image_width = cairo_image_surface_get_width(ref_surface);
             ref_image_height = cairo_image_surface_get_height(ref_surface);
@@ -2642,9 +2645,7 @@ draw_reading_mode(cairo_t *cr)
                                  ref_surface,
                                  frame_x1 + frame_padding, frame_y1 + frame_padding);
         cairo_fill(cr);  
-        if(scale_figure){
-            cairo_surface_destroy(ref_surface);
-        }      
+        cairo_surface_destroy(ref_surface);
     }
     /* panel */
     if(!ui.is_panel_hovered || meta->active_referenced_figure){
@@ -4077,7 +4078,7 @@ tooltip_event_callback(GtkWidget  *widget,
                                                    x, y);
             if(link->is_hovered){
                 link_tip = g_strdup_printf("<span font='sans 10'>%s</span>",
-                                           link->tip);
+                                           link->tip ? link->tip : "Not available.");
                 ui.is_link_hovered = TRUE;
             }
             list_p = list_p->next;
@@ -4271,7 +4272,7 @@ init_app(GtkApplication *app)
     ui.app_info_text = 
         "<span font='sans 12' foreground='black'><b>readaratus</b>\n"
         "A dynamic book reading system for computers\n\n"
-        "Version 2.1\n"
+        "Version 2.1.1 - June 2020\n"
         "Copyright © 2020 <i>readaratus team</i>\n</span>"
         "<span font='sans 12' foreground='blue'>www.readaratus.ir</span>\n\n\n\n"
         "<span font='sans 10' foreground='black'>This program is provided without any warranty and is licensed under the terms of\n"

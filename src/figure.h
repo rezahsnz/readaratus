@@ -40,7 +40,6 @@ struct Figure
     int page_num;
     int image_id; /* index given by poppler to images */
     Rect *image_physical_layout;
-    void *image; /* cairo image surface */
 
     GList *captions;
 
