@@ -144,10 +144,13 @@ toc_find_dest(PopplerDocument *doc,
 			new_dest = poppler_dest_copy(dest);
     		break;
     }
+    if(!new_dest){
+        g_print("Warning: null named destination, link amy not work.\n");
+    }
     TOCItem target;
-    target.offset_x = new_dest->change_left ? new_dest->left : 0;
-	target.offset_y = new_dest->change_top ? new_dest->top : 0;
-	target.page_num = new_dest->page_num - 1;
+    target.offset_x = new_dest ? (new_dest->change_left ? new_dest->left : 0) : 0;
+	target.offset_y = new_dest ? (new_dest->change_top ? new_dest->top : 0) : 0;
+	target.page_num = new_dest ? new_dest->page_num - 1 : -1;
 	poppler_dest_free(new_dest);
 	return target;
 }

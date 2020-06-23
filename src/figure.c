@@ -115,7 +115,6 @@ figure_new(void)
     new_fig->page_num = -1;
     new_fig->image_id = -1;
     new_fig->image_physical_layout = NULL;
-    new_fig->image = NULL;
     new_fig->captions = NULL;
     new_fig->reference = NULL;
     return new_fig;
