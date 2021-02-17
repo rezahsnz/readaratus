@@ -32,3 +32,6 @@ Then open a shell and compile the application.
  ```
 ## License
 This project is licensed under the terms of GNU General Public License Version 3 or later - see the [LICENSE](LICENSE) file for details.
+
+## Development status  
+As of July 2020, development is stopped because of lack of funding. I'm trying to find new sources of money to continue working on this project. Once a recurring stream of funds is found, I'll resume working full-time.
